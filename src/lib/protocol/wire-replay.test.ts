@@ -25,7 +25,7 @@ interface ReplayFixture {
 	expected: Projection;
 }
 
-const fixtureModules = import.meta.glob('../../../../../tests/fixtures/wire/replay/*.json', {
+const fixtureModules = import.meta.glob('../../../tests/fixtures/wire/replay/*.json', {
 	eager: true,
 	query: '?raw',
 	import: 'default'

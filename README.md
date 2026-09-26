@@ -1,10 +1,14 @@
 # Apron web client
 
-This is a Svelte 5 / SvelteKit 2 + TypeScript client for the Apron Chat Protocol. It
-builds as a static shell with `adapter-static`; the browser opens the WebSocket
-from `onMount`, so the generated site can be served by the Go server.
+A Svelte 5 / SvelteKit 2 + TypeScript client for the
+[Apron Chat Protocol](https://github.com/shazow/apron/blob/main/PROTOCOL.md),
+deployed at `https://web.apron.chat`. It builds as a static shell with
+`adapter-static`; the browser opens the WebSocket from `onMount`, so any static
+host can serve the generated site, including the
+[Go reference server](https://github.com/shazow/apron/tree/main/servers/go).
 
-From this directory:
+Use Node.js 24 (see `.node-version`), or `devenv shell`, which also provides
+Wrangler:
 
 ```sh
 npm ci
@@ -15,13 +19,43 @@ npm run build     # writes the static site to build/
 npm run preview
 ```
 
-The default connection is same-origin `/ws` in a browser unless
-`VITE_DEFAULT_SERVER_URL` is set at build time. `make deploy-web` from the
-repository root builds with `wss://server.apron.chat/` and deploys the static
-frontend to `https://web.apron.chat` using `wrangler.toml` and the Wrangler on
-`PATH` (devenv provides it). The backend deploys separately, from
+`npm run dev` needs a backend on port 8080: the Go reference server from
+[shazow/apron](https://github.com/shazow/apron) (`make dev-server`), or the
+demo Worker from
+[apron-chat/apron-server-cloudflare](https://github.com/apron-chat/apron-server-cloudflare)
+(`npx wrangler dev --port 8080`).
+
+The unit tests replay protocol fixtures that shazow/apron owns.
+`tests/fixtures` holds a copy, and `tests/fixtures/SOURCE` names the commit it
+came from; `scripts/sync-fixtures.sh [ref]` updates it (`main` by default).
+The end-to-end browser tests against the Go server are in shazow/apron's
+`tests/interop`.
+
+## Deployment
+
+[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) runs
+`npm run check`, `npm test`, and `npm run build` on every pull request and on
+`main`. A push to `main` (a merged pull request), or a manual run of the
+workflow on `main`, then builds with `wss://server.apron.chat/` as the default
+server and deploys `build/` to `https://web.apron.chat` with `wrangler.toml`,
+in the `web.apron.chat` GitHub environment. It needs the `CLOUDFLARE_API_TOKEN`
+and `CLOUDFLARE_ACCOUNT_ID` secrets there or on the repository; the token needs
+to deploy Workers and manage the `web.apron.chat` custom domain. Deploys never
+run concurrently. To deploy by hand, with Wrangler on `PATH`:
+
+```sh
+VITE_DEFAULT_SERVER_URL=wss://server.apron.chat/ npm run build
+wrangler deploy
+```
+
+The backend deploys separately, from
 [apron-chat/apron-server-cloudflare](https://github.com/apron-chat/apron-server-cloudflare).
 The apex `apron.chat` is reserved for docs.
+
+## Behavior
+
+The default connection is same-origin `/ws` in a browser unless
+`VITE_DEFAULT_SERVER_URL` is set at build time.
 Local development and ordinary builds retain the same-origin default.
 After a failed WebSocket handshake, the client makes a bounded HTTP diagnostic
 request to the same URL with `?apron_connection_status=1`. Supporting servers
@@ -45,7 +79,7 @@ server can push to your other devices instead; it is never shown to anyone.
 Explicit server URLs keep their path: a bare hostname connects at `/`, while
 servers that require `/ws` should be entered with that suffix.
 
-The client keeps one user object per `user_id` ([PROTOCOL.md §3.3](../../PROTOCOL.md#33-identity)) and merges
+The client keeps one user object per `user_id` ([PROTOCOL.md §3.3](https://github.com/shazow/apron/blob/main/PROTOCOL.md#33-identity)) and merges
 every current object into it field by field — `you`, `user` notifications, and
 room `members` and `users` in `room_list` and `room_update` — so a rename or a
 new avatar shows on earlier messages too. A present field replaces, an empty
@@ -63,7 +97,7 @@ starts with `@` render as quiet centered system lines, except the three that
 state a scope (`@private`, `@room`, `@server`), which render as the design
 system's notice card: left-aligned, and titled by the sender as the server
 names it, `Name (@user_id)`, such as "System message to you (@private)" from
-this repository's servers. `@private` ones, and
+the Apron example servers. `@private` ones, and
 every `message` without a `message_id` (such as a command's reply), are
 transient notices: a dashed card for the session, never stored, and gone on
 reload. A notice sent before authentication, such as a server's welcome
@@ -89,7 +123,7 @@ with the `@user_id` when someone else shows under the same name. The lines
 never count as unread or mention you, and a message after one starts a new
 sender group.
 
-Mentions follow the `@user_id` convention ([PROTOCOL.md Appendix A.3](../../PROTOCOL.md#a3-mention-text)). Typing `@` in the
+Mentions follow the `@user_id` convention ([PROTOCOL.md Appendix A.3](https://github.com/shazow/apron/blob/main/PROTOCOL.md#a3-mention-text)). Typing `@` in the
 composer opens the mention picker over the room's members (from the room's
 listing, kept current by the `membership` records of joins and leaves), or the
 room's recent senders on a server without `room_list`, filtered by name or ID.
@@ -100,7 +134,7 @@ typed `@name` (case-insensitive, spaces allowed) or `@user_id` collapses into
 the same chip once finished, when exactly one person in the room goes by it;
 one ending the draft collapses on send. Chips are always sent as `@user_id`, so
 the field reads by name while the wire stays ID-based, and each chip's `user_id`
-goes in `body.mentions` ([PROTOCOL.md §3.5](../../PROTOCOL.md#35-messages)): a chip deleted before sending mentions no one,
+goes in `body.mentions` ([PROTOCOL.md §3.5](https://github.com/shazow/apron/blob/main/PROTOCOL.md#35-messages)): a chip deleted before sending mentions no one,
 and an edit resubmits the message's mentions. A rendered body (plain or Markdown, never inside
 code) shows a known user's mention as a chip with their current name, a room's
 as a link that opens it (or joins it), and unknown IDs as written. Only
@@ -111,7 +145,7 @@ when it lands above the fold, turns the jump bar rust with **Jump to mention**.
 Text that merely contains your `@user_id` does none of that.
 
 With the `command` cap, composer text that starts with one `/` is a command
-([PROTOCOL.md §4.8](../../PROTOCOL.md#48-command)): the composer shows a **Command** tag, sets the line in
+([PROTOCOL.md §4.8](https://github.com/shazow/apron/blob/main/PROTOCOL.md#48-command)): the composer shows a **Command** tag, sets the line in
 monospace, and **Run** replaces **Send**. `/nick` (a `me` request), `/join`,
 `/leave` and `/topic` (`room_join`, `room_leave`, and `room_set` with a new
 title, with the `rooms` cap) are handled by the client; anything else goes out
@@ -127,8 +161,8 @@ read cursor (`read_message_id`), which the server syncs across your
 connections. Opening a room places a **New** divider above the first message
 after the cursor as it was when you arrived; it stays put while you read.
 
-With the `rooms` cap, rooms come by request ([PROTOCOL.md §4.3](../../PROTOCOL.md#43-rooms)): right behind
-`auth`, without waiting for its result ([PROTOCOL.md §3.2](../../PROTOCOL.md#32-authentication)), the client lists
+With the `rooms` cap, rooms come by request ([PROTOCOL.md §4.3](https://github.com/shazow/apron/blob/main/PROTOCOL.md#43-rooms)): right behind
+`auth`, without waiting for its result ([PROTOCOL.md §3.2](https://github.com/shazow/apron/blob/main/PROTOCOL.md#32-authentication)), the client lists
 the rooms you have joined with `room_list` (`filter: "joined"`, `members:
 true`), which is the complete set, threads included, and keeps it current from
 `room_update` (`joined`, `left`, `updated`) and each room's members from
@@ -191,7 +225,7 @@ dynamic `import()` the first time a picker opens, so they stay out of the main
 bundle, and the picker gets its data, English strings and native glyphs passed
 in, so it never fetches from a CDN.
 
-Embeds render by kind, in the design system's components ([PROTOCOL.md §4.6](../../PROTOCOL.md#46-embeds-and-avatars)):
+Embeds render by kind, in the design system's components ([PROTOCOL.md §4.6](https://github.com/shazow/apron/blob/main/PROTOCOL.md#46-embeds-and-avatars)):
 
 - **Uploads** (cap `embed:upload`): the composer's paperclip and microphone send
   files and voice clips as `upload` embeds with whatever is in the field, then
@@ -222,7 +256,7 @@ form. The profile bar at the foot of the sidebar edits your handle, which is
 sent with the protocol `me` request after authentication; the editor shows
 what the server actually kept. With the `command` and `embed:upload` caps it
 also sets your avatar: a `/avatar` command carrying one `upload` embed
-([PROTOCOL.md §4.6.6](../../PROTOCOL.md#466-avatars)), whose result names the `write_url` the image is written to; the
+([PROTOCOL.md §4.6.6](https://github.com/shazow/apron/blob/main/PROTOCOL.md#466-avatars)), whose result names the `write_url` the image is written to; the
 server applies it with a `user` notification. **Remove** sends `me` with
 `avatar: ""`.
 
@@ -258,12 +292,12 @@ automatically replace them with a guest identity. Signing out clears the stored
 credentials and reconnects as a guest. The Go example's sessions are in memory
 and are lost on backend restart.
 
-The WebAuthn exchange follows [§4.9 of the protocol](../../PROTOCOL.md#49-webauthn-authentication):
+The WebAuthn exchange follows [§4.9 of the protocol](https://github.com/shazow/apron/blob/main/PROTOCOL.md#49-webauthn-authentication):
 both registration and login use `action` plus `step: "begin"` or
 `step: "finish"`, with the server's `challenge_id` and `public_key` and the
 browser's standard JSON credential representation. The implementation details
 for the Go example are documented in
-[`servers/go/README.md`](../../servers/go/README.md#example-webauthn-exchange).
+[`servers/go/README.md`](https://github.com/shazow/apron/blob/main/servers/go/README.md#example-webauthn-exchange).
 
 The UI follows the Apron design system. `src/lib/design/tokens.css` holds its
 color, type, spacing, radius and size tokens as CSS custom properties (dark is
@@ -325,7 +359,7 @@ stay; a result without `left` is a full listing. A thread reopened after a
 reconnect loads only what came after its own checkpoint. Signing out or switching servers still starts over. The UI displays
 a notice that the demo retains roughly the last day (from the worker's
 `server.ext.demo` hints) and honors server retry delays with jittered reconnect
-backoff. When the `server` frame carries `ping` ([PROTOCOL.md §1](../../PROTOCOL.md#1-transport--framing)), the client sends
+backoff. When the `server` frame carries `ping` ([PROTOCOL.md §1](https://github.com/shazow/apron/blob/main/PROTOCOL.md#1-transport--framing)), the client sends
 exactly `{"method":"ping"}` every that many seconds, from before
 authentication on; a ping that goes a whole interval without the
 `{"method":"pong"}` answer marks the socket dead, and it is replaced through

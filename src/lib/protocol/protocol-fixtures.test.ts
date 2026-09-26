@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import historyFixture from '../../../../../tests/fixtures/history.json';
-import webAuthn from '../../../../../tests/fixtures/webauthn.json';
+import historyFixture from '../../../tests/fixtures/history.json';
+import webAuthn from '../../../tests/fixtures/webauthn.json';
 import { ChatClient, type ClientSnapshot } from './client';
 import { FakeSocket, settle } from './fake-socket';
 import { compareLogIds } from './reducer';

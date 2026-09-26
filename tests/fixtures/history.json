@@ -1,0 +1,147 @@
+{
+  "format": 4,
+  "kind": "history",
+  "description": "Protocol v6 room and history availability boundaries, including a room whose history was discarded (null history_log_id). `room` is the room record as `room_list` lists it, delivery fields included. Records are flat snapshots; history results carry rooms, messages, reactions, and membership arrays, each of which may be omitted when empty.",
+  "references": [
+    "PROTOCOL.md#34-rooms",
+    "PROTOCOL.md#41-history",
+    "https://github.com/apron-chat/apron-server-cloudflare/blob/main/SPEC.md#9-rolling-history-and-base-protocol-availability"
+  ],
+  "cases": [
+    {
+      "name": "discarded-history",
+      "room": {
+        "room_id": "general",
+        "log_id": "1790000000000",
+        "title": "General",
+        "latest_log_id": "1790000000500",
+        "history_log_id": null
+      },
+      "history": {
+        "id": "h0",
+        "result": {
+          "more": false,
+          "latest_log_id": "1790000000500",
+          "history_log_id": null
+        }
+      },
+      "assertions": {
+        "latest_log_id": "1790000000500",
+        "history_log_id": null,
+        "effective_lower_bound": "1790000000501",
+        "empty": true
+      }
+    },
+    {
+      "name": "empty-page-retains-room-boundary",
+      "room": {
+        "room_id": "general",
+        "log_id": "1789913600001",
+        "title": "General",
+        "latest_log_id": "1790000001000",
+        "history_log_id": "1789913600001"
+      },
+      "history": {
+        "id": "h1",
+        "result": {
+          "rooms": [],
+          "messages": [],
+          "reactions": [],
+          "more": false,
+          "latest_log_id": "1790000001000",
+          "history_log_id": "1789913600001"
+        }
+      },
+      "assertions": {
+        "history_log_id": "1789913600001",
+        "latest_log_id": "1790000001000",
+        "effective_lower_bound": "1789913600001",
+        "empty": true
+      }
+    },
+    {
+      "name": "floor-advances-with-old-message-id-retained",
+      "room": {
+        "room_id": "general",
+        "log_id": "600",
+        "latest_log_id": "900",
+        "history_log_id": "850"
+      },
+      "messages": [
+        {
+          "message_id": "700",
+          "log_id": "800",
+          "room_id": "general",
+          "from": { "user_id": "alice" },
+          "body": { "text": "old edit" }
+        },
+        {
+          "message_id": "700",
+          "log_id": "875",
+          "room_id": "general",
+          "from": { "user_id": "alice" },
+          "body": { "text": "recent edit" }
+        },
+        {
+          "message_id": "710",
+          "log_id": "810",
+          "room_id": "general",
+          "from": { "user_id": "bob" },
+          "body": { "text": "expired" }
+        }
+      ],
+      "history": {
+        "id": "h2",
+        "result": {
+          "rooms": [],
+          "messages": [
+            {
+              "message_id": "700",
+              "log_id": "875",
+              "room_id": "general",
+              "from": { "user_id": "alice" },
+              "body": { "text": "recent edit" }
+            }
+          ],
+          "reactions": [
+            {
+              "log_id": "880",
+              "message_id": "700",
+              "room_id": "general",
+              "reactions": [{ "from": { "user_id": "bob" }, "emojis": ["👍"] }]
+            }
+          ],
+          "first_log_id": "875",
+          "last_log_id": "880",
+          "more": false,
+          "latest_log_id": "900",
+          "history_log_id": "850"
+        }
+      },
+      "assertions": {
+        "retained_message_ids": ["700"],
+        "discarded_log_ids": ["800", "810"],
+        "floor_is_monotonic": true
+      }
+    },
+    {
+      "name": "exact-checkpoint-boundary",
+      "checkpoint": "99",
+      "floor": "100",
+      "assertions": {
+        "forward_recovery_after": "100",
+        "restart": false
+      }
+    },
+    {
+      "name": "overtaken-checkpoint",
+      "checkpoint": "98",
+      "floor": "100",
+      "assertions": {
+        "forward_recovery_after": "100",
+        "restart": true,
+        "rebuild_from": "100"
+      }
+    }
+  ]
+}
