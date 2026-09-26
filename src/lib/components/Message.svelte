@@ -313,6 +313,16 @@
 	.reply-static { cursor: default; }
 	.reply-static:hover { background: var(--bg-200); }
 	.plain { white-space: pre-wrap; }
+	.markdown :global(blockquote) {
+		margin: var(--space-2) 0;
+		padding: var(--space-1) var(--space-3);
+		border-left: 3px solid var(--line-strong);
+		border-radius: var(--radius-sm);
+		background: var(--bg-200);
+		color: var(--ink-muted);
+	}
+	.markdown :global(blockquote > :first-child) { margin-top: 0; }
+	.markdown :global(blockquote > :last-child) { margin-bottom: 0; }
 	.edit { display: flex; flex-direction: column; gap: var(--space-2); }
 	.edit-field { height: auto; min-height: 66px; padding: var(--space-2); resize: vertical; font-size: 15px; line-height: 22px; }
 </style>
