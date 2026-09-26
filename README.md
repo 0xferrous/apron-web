@@ -11,6 +11,7 @@ Use Node.js 24 (see `.node-version`), or `devenv shell`, which also provides
 Wrangler:
 
 ```sh
+git submodule update --init   # or clone with --recurse-submodules
 npm ci
 npm run dev       # Vite serves the UI and proxies /ws, /write/, /files/, /streams/ to 127.0.0.1:8080
 npm run check     # svelte-check
@@ -25,11 +26,13 @@ demo Worker from
 [apron-chat/apron-server-cloudflare](https://github.com/apron-chat/apron-server-cloudflare)
 (`npx wrangler dev --port 8080`).
 
-The unit tests replay protocol fixtures that shazow/apron owns.
-`tests/fixtures` holds a copy, and `tests/fixtures/SOURCE` names the commit it
-came from; `scripts/sync-fixtures.sh [ref]` updates it (`main` by default).
-The end-to-end browser tests against the Go server are in shazow/apron's
-`tests/interop`.
+The unit tests replay the implementation-agnostic protocol fixtures in
+[shazow/apron](https://github.com/shazow/apron), checked out as the `protocol`
+submodule and pinned to a commit. Dependabot opens a pull request when it
+moves, so CI runs the client against new fixtures before they are adopted; to
+update by hand, run `git -C protocol fetch origin main`, check out the commit
+you want, and commit `protocol`. The end-to-end browser tests against the Go
+server are in shazow/apron's `tests/interop`.
 
 ## Deployment
 

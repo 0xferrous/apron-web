@@ -14,6 +14,7 @@
   };
 
   enterTest = ''
+    git submodule update --init
     npm ci
     npm run check
     npm test
