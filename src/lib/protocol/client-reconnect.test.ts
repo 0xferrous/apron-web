@@ -299,6 +299,38 @@ describe('persisted session tokens', () => {
 		elsewhere.stop();
 	});
 
+	it('signs in with a pasted token, such as a bot token, and keeps it to resume with', async () => {
+		const client = new ChatClient('ws://fake.test/');
+		client.subscribe((next) => (snapshot = next));
+		client.start();
+		await latest().greet([], { auth: ['token', 'guest'] });
+		expect(() => client.useToken('  ')).toThrow('Paste a token');
+
+		client.useToken(' apron_bot_secret ');
+		vi.advanceTimersByTime(0);
+		expect(FakeSocket.instances).toHaveLength(2);
+		await latest().greet([], { auth: ['token', 'guest'], you: { user_id: 'bot_foo_1234', name: 'Bot of Foo' } });
+		expect(authParams()).toEqual(expect.objectContaining({ scheme: 'token', token: 'apron_bot_secret' }));
+		expect(snapshot.you).toEqual({ user_id: 'bot_foo_1234', name: 'Bot of Foo' });
+		expect(snapshot.readOnly).toBe(false);
+		expect(storage.get('apron.session:ws://fake.test/')).toBe('apron_bot_secret');
+
+		// A refused token is dropped, with the server's error to show.
+		client.useToken('apron_bot_revoked');
+		vi.advanceTimersByTime(0);
+		const socket = latest();
+		socket.open();
+		socket.receive({ method: 'server', params: { protocol: 6, auth: ['token', 'guest'], caps: [] } });
+		expect(authParams()).toEqual(expect.objectContaining({ scheme: 'token', token: 'apron_bot_revoked' }));
+		const auth = socket.sent.find((frame) => frame.method === 'auth')!;
+		socket.receive({ id: auth.id, error: { code: -32001, message: 'Invalid bot token' } });
+		await settle();
+		expect(snapshot.error).toBe('Invalid bot token');
+		expect(snapshot.authenticated).toBe(false);
+		expect(storage.has('apron.session:ws://fake.test/')).toBe(false);
+		client.stop();
+	});
+
 	it('reads only as a guest where the server says guests only read, until a sign-in', async () => {
 		const readOnlyExt = { demo: { guest_posting: false } };
 		const guest = new ChatClient('ws://fake.test/');

@@ -1027,6 +1027,23 @@ export class ChatClient {
 		return this.authNameRequest;
 	}
 
+	/**
+	 * Signs in with a bearer token the user pasted, such as a bot token from
+	 * `/invite-bot`: reconnects and authenticates with `scheme: "token"` (§3.2),
+	 * keeping the token to resume with like a passkey session's. A refused
+	 * token is dropped and its error left in the snapshot.
+	 */
+	useToken(token: string): void {
+		const trimmed = token.trim();
+		if (!trimmed) throw new Error('Paste a token to sign in with');
+		this.sessionToken = trimmed;
+		this.storeSession(trimmed);
+		this.passkeyRequired = true;
+		this.registeredSession = true;
+		this.error = undefined;
+		this.restart();
+	}
+
 	async signOut(): Promise<void> {
 		if (this.passkeyAbort || this.requests.size) throw new Error('Wait for pending requests to finish, then try again');
 		this.sessionToken = undefined;

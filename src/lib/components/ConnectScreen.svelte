@@ -1,5 +1,5 @@
 <script lang="ts" module>
-	export type Scheme = 'guest' | 'webauthn';
+	export type Scheme = 'guest' | 'webauthn' | 'token';
 </script>
 
 <script lang="ts">
@@ -13,8 +13,11 @@
 
 	const SCHEMES: Record<Scheme, { label: string; hint: string }> = {
 		guest: { label: 'Guest', hint: 'No token needed; the server picks a guest identity.' },
-		webauthn: { label: 'Passkey', hint: 'Signs in with a passkey on this device, or creates one. Your display name comes along.' }
+		webauthn: { label: 'Passkey', hint: 'Signs in with a passkey on this device, or creates one. Your display name comes along.' },
+		token: { label: 'Token', hint: 'Signs in with a token the server gave you, such as a bot token from /invite-bot.' }
 	};
+	/** Every scheme this client can drive, in the order shown when the server's list isn't known yet. */
+	const KNOWN_SCHEMES = Object.keys(SCHEMES) as Scheme[];
 
 	interface Props {
 		client: ChatClient;
@@ -47,6 +50,8 @@
 	/** Connected to a new backend as a guest; the passkey waits for a tap, since browsers may refuse a prompt the user didn't start. */
 	let passkeyStep = $state(false);
 	let error = $state('');
+	/** The pasted token for the Token scheme; cleared once handed to the client. */
+	let token = $state('');
 	let plan = $state<'immediate' | 'login' | 'register'>('register');
 	let snapshot = $derived(session.snapshot);
 	let normalizedInput = $derived.by(() => {
@@ -60,13 +65,16 @@
 	let here = $derived(normalizedInput === client.url && snapshot.status === 'connected' && snapshot.authenticated);
 	let passkeySession = $derived(!!snapshot.passkeySession);
 	let passkeyHint = $derived(!!snapshot.passkeyHint);
-	/** Sign-in schemes this client can drive, narrowed to what the connected server offers once it is the one in the field. */
+	/**
+	 * The sign-in schemes the server in the field advertises, in its order,
+	 * that this client can drive (passkeys only where the browser has them).
+	 * Until that server has answered, every scheme the client knows.
+	 */
 	let schemes = $derived.by((): Scheme[] => {
-		const supported: Scheme[] = passkeyUnavailable ? ['guest'] : ['guest', 'webauthn'];
-		const offered = session.server?.auth;
-		if (!offered || normalizedInput !== client.url) return supported;
-		const narrowed = supported.filter((candidate) => offered.includes(candidate));
-		return narrowed.length ? narrowed : supported;
+		const offered = normalizedInput === client.url ? session.server?.auth : undefined;
+		const listed = offered ? offered.filter((candidate): candidate is Scheme => Object.hasOwn(SCHEMES, candidate)) : KNOWN_SCHEMES;
+		const usable = listed.filter((candidate) => candidate !== 'webauthn' || !passkeyUnavailable);
+		return usable.length ? usable : ['guest'];
 	});
 	let chosen = $derived(schemes.includes(scheme) ? scheme : schemes[0]);
 	/** The server in the field is the connected one, and its guests only read. */
@@ -90,6 +98,7 @@
 	let submitLabel = $derived(
 		status === 'connecting' ? 'Connecting…' : status === 'authing' ? 'Signing in…'
 			: passkeyNow ? 'Continue with passkey'
+			: chosen === 'token' ? 'Sign in'
 			: here && chosen === 'guest' && passkeySession ? 'Sign out'
 			: here ? 'Done' : 'Connect'
 	);
@@ -144,8 +153,12 @@
 			return;
 		}
 		serverInput = normalized;
-		displayName = displayName.trim();
 		saveServerUrl(normalized);
+		if (chosen === 'token') {
+			signInWithToken(normalized);
+			return;
+		}
+		displayName = displayName.trim();
 		saveDisplayName(displayName);
 		if (passkeyNow) {
 			void passkey('continue');
@@ -167,6 +180,27 @@
 		pending = true;
 		if (normalized !== client.url) client.setUrl(normalized);
 		else client.restart();
+	}
+
+	/**
+	 * Reconnects to the server in the field and signs in with the pasted token.
+	 * The server names a token's identity (a bot is named after its owner), so
+	 * no display name goes along.
+	 */
+	function signInWithToken(normalized: string): void {
+		if (!token.trim()) {
+			error = 'Paste a token to sign in with';
+			return;
+		}
+		// Another identity on this backend, or another backend: drop what the page held.
+		if (normalized === client.url) onsignout();
+		else onconnect();
+		passkeyStep = false;
+		client.setDisplayName('');
+		if (normalized !== client.url) client.setUrl(normalized);
+		client.useToken(token);
+		token = '';
+		pending = true;
 	}
 
 	/** Runs straight from the tap, so the browser sees the user asked for it. */
@@ -206,9 +240,15 @@
 		<label class="ap-fieldlabel">Server
 			<input class="ap-field ap-field-mono" data-testid="server-url-input" type="text" inputmode="url" bind:value={serverInput} placeholder="wss://server.apron.chat/" disabled={busy} autocomplete="url" spellcheck="false" />
 		</label>
-		<label class="ap-fieldlabel">Display name
-			<input class="ap-field" data-testid="connect-name-input" bind:value={displayName} placeholder="How others see you" disabled={busy} maxlength="64" autocomplete={chosen === 'webauthn' ? 'username webauthn' : 'nickname'} spellcheck="false" />
-		</label>
+		{#if chosen === 'token'}
+			<label class="ap-fieldlabel">Token
+				<input class="ap-field ap-field-mono" data-testid="connect-token-input" type="password" bind:value={token} placeholder="apron_bot_…" disabled={busy} autocomplete="off" spellcheck="false" />
+			</label>
+		{:else}
+			<label class="ap-fieldlabel">Display name
+				<input class="ap-field" data-testid="connect-name-input" bind:value={displayName} placeholder="How others see you" disabled={busy} maxlength="64" autocomplete={chosen === 'webauthn' ? 'username webauthn' : 'nickname'} spellcheck="false" />
+			</label>
+		{/if}
 		<div class="ap-fieldlabel">Sign in with
 			<div class="ap-seg" role="radiogroup" aria-label="Sign in with">
 				{#each schemes as candidate (candidate)}
