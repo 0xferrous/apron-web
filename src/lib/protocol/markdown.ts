@@ -1,8 +1,40 @@
-import { HtmlRenderer, Parser } from 'commonmark';
+import DOMPurify from 'dompurify';
+import MarkdownIt from 'markdown-it';
 
-const parser = new Parser();
-// A line break typed in a chat message is meant: soft breaks render as `<br />`, not as a space.
-const renderer = new HtmlRenderer({ safe: true, softbreak: '<br />' });
+/**
+ * CommonMark with GitHub tables and strikethrough. Raw HTML in a message is
+ * shown as text, never markup (`html: false`), and links with unsafe schemes
+ * (`javascript:`, `data:` other than images, ...) are not linked. A typed line
+ * break is meant: soft breaks render as `<br>`, not as a space.
+ */
+const md = new MarkdownIt({ html: false, breaks: true, linkify: false, typographer: false });
+
+// Table alignment as a class, so no `style` attribute has to be let through.
+md.core.ruler.push('align_class', (state) => {
+	for (const token of state.tokens) {
+		if (token.type !== 'th_open' && token.type !== 'td_open') continue;
+		const align = String(token.attrGet('style') ?? '').match(/^text-align:(left|center|right)$/)?.[1];
+		token.attrs = align ? [['class', `ap-align-${align}`]] : null;
+	}
+});
+// Wide tables scroll inside the message rather than widening it.
+md.renderer.rules.table_open = () => '<div class="ap-table"><table>\n';
+md.renderer.rules.table_close = () => '</table></div>\n';
+
+/**
+ * The only markup a body may hold once rendered: what the Markdown above
+ * produces, plus the links and mention chips added to it. Raw HTML never gets
+ * this far; sanitizing last also covers everything done after rendering.
+ */
+const ALLOWED = {
+	ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 's', 'code', 'pre', 'blockquote', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'hr', 'a', 'img', 'div', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'span', 'button'],
+	ALLOWED_ATTR: ['href', 'title', 'src', 'alt', 'start', 'class', 'rel', 'target', 'type', 'data-user-id', 'data-room-id'],
+	ALLOW_DATA_ATTR: false
+};
+
+function sanitize(html: string): string {
+	return DOMPurify.sanitize(html, ALLOWED);
+}
 
 /**
  * What an `@id` mention names (Appendix A.3): a known user, rendered with
@@ -46,30 +78,36 @@ const CACHE_SIZE = 2000;
 const rendered = new Map<string, string>();
 
 /**
- * CommonMark output for a source. A body renders every time its message row
+ * Markdown output for a source. A body renders every time its message row
  * is created, and again to find its mentions, so reopening a room would parse
  * it all anew; mentions are linked afterwards, so names stay current.
  */
-function commonmark(source: string): string {
+function markdown(source: string): string {
 	let html = rendered.get(source);
 	if (html !== undefined) {
 		rendered.delete(source);
 	} else {
-		html = renderer.render(parser.parse(source));
+		html = md.render(source);
 		if (rendered.size >= CACHE_SIZE) rendered.delete(rendered.keys().next().value!);
 	}
 	rendered.set(source, html);
 	return html;
 }
 
-/** CommonMark rendering with raw HTML and unsafe URL schemes disabled, keeping typed line breaks. */
+/**
+ * Markdown rendering with raw HTML and unsafe URL schemes disabled, keeping
+ * typed line breaks. Without a DOM to sanitize with (tests, prerendering) the
+ * body is rendered as plain text instead, which needs no sanitizing.
+ */
 export function renderMarkdown(source: string, resolve?: MentionResolver): string {
-	return linkText(commonmark(source), resolve);
+	if (!DOMPurify.isSupported) return linkifyText(escapeHtml(source), resolve);
+	return sanitize(linkText(markdown(source), resolve));
 }
 
 /** A plain body as HTML: escaped, with bare links and mentions linked. Line breaks are kept by CSS (`pre-wrap`). */
 export function renderPlain(source: string, resolve?: MentionResolver): string {
-	return linkifyText(escapeHtml(source), resolve);
+	const html = linkifyText(escapeHtml(source), resolve);
+	return DOMPurify.isSupported ? sanitize(html) : html;
 }
 
 function escapeHtml(value: string): string {
