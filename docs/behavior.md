@@ -26,6 +26,10 @@ asks, or until their next message arrives in that room.
 With the `activity` cap the client also sends `activity` `{away: true}` while
 the tab is hidden or unfocused and `{away: false}` when it is back, so the
 server can push to your other devices instead; it is never shown to anyone.
+The Member list button at the end of the room title bar toggles a right-hand
+sidebar that lists the current room's members from its `room_list` snapshot.
+It starts open on wide screens and appears as an overlay on narrow screens.
+The sidebar does not show typing or connection status.
 Explicit server URLs keep their path: a bare hostname connects at `/`, while
 servers that require `/ws` should be entered with that suffix.
 

@@ -1,4 +1,8 @@
 <script lang="ts">
+	import Paperclip from '@lucide/svelte/icons/paperclip';
+	import Square from '@lucide/svelte/icons/square';
+	import Mic from '@lucide/svelte/icons/mic';
+	import Smile from '@lucide/svelte/icons/smile';
 	import { untrack } from 'svelte';
 	import type { MentionPerson } from '$lib/protocol/markdown';
 	import { collapseMentions, draftMentions, draftText, insertMention, insertText, mentionQuery, normalizeDraft, type DraftPart } from '$lib/ui/draft';
@@ -454,14 +458,14 @@
 		{#if canUpload}
 			<span class="ap-composer-tools">
 				<button class="ap-iconbtn" type="button" aria-label="Attach a file" title="Attach a file" disabled={disabled || recording} onclick={() => attachInput?.click()}>
-					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5l-8.8 8.8a5.5 5.5 0 0 1-7.8-7.8L13.6 3.3a3.5 3.5 0 0 1 5 5l-9.2 9.2a1.5 1.5 0 0 1-2.1-2.1L15.9 6.8" /></svg>
+					<Paperclip size={18} aria-hidden="true" />
 				</button>
 				{#if canRecord}
 					<button class="ap-iconbtn" class:ap-iconbtn-rec={recording} type="button" aria-label={recording ? 'Stop recording' : 'Record a voice message'} aria-pressed={recording} title={recording ? 'Stop recording' : 'Record a voice message'} {disabled} onclick={() => (recording ? stopRecording() : startRecording())}>
 						{#if recording}
-							<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
+							<Square size={16} fill="currentColor" stroke="currentColor" strokeWidth={0} aria-hidden="true" />
 						{:else}
-							<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3M8 21h8" /></svg>
+							<Mic size={18} aria-hidden="true" />
 						{/if}
 					</button>
 				{/if}
@@ -511,7 +515,7 @@
 				use:emojiAnchor
 				onclick={openEmoji}
 			>
-				<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01" /></svg>
+				<Smile size={18} aria-hidden="true" />
 			</button>
 		</span>
 		<button class="ap-btn ap-btn-primary ap-btn-sm" data-testid="send-button" type="submit" aria-label={command ? 'Run command' : 'Send message'} disabled={disabled || recording || !value.trim()}>{command ? 'Run' : 'Send'}</button>
