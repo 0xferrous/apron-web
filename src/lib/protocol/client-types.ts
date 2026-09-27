@@ -279,8 +279,11 @@ export interface RoomPatch {
 	ext?: JsonObject | null;
 }
 
+export type WebSocketFactory = (url: string) => WebSocket;
+
 export interface ChatClientOptions {
 	serverUrl: string;
 	displayName?: string;
+	webSocketFactory?: WebSocketFactory;
 	onChange?: (snapshot: ClientSnapshot) => void;
 }

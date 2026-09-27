@@ -41,12 +41,13 @@ function sanitize(html: string): string {
  * their latest name, or a room, rendered as a link to it. Unknown IDs render
  * as written.
  */
-export type MentionTarget =
-	| { kind: 'user'; id: string; name: string; me?: boolean }
-	| { kind: 'room'; id: string; title: string };
+export type RoomMentionTarget = { kind: 'room'; id: string; title: string };
+export type MentionTarget = { kind: 'user'; id: string; name: string; me?: boolean } | RoomMentionTarget;
 
-/** Looks an ID up; when it names both a user and a room, answer with the user. */
+/** Looks an `@id` up; when it names both a user and a room, answer with the user. */
 export type MentionResolver = (id: string) => MentionTarget | undefined;
+/** Resolves a `#room_id` without user-ID precedence. */
+export type RoomMentionResolver = (id: string) => RoomMentionTarget | undefined;
 
 /** Someone a composer can mention: a room member or a recent sender. */
 export interface MentionPerson {
@@ -57,12 +58,8 @@ export interface MentionPerson {
 	me?: boolean;
 }
 
-/**
- * `@` then an optional second `@` (system identities, Appendix A.1) and a run of
- * `[A-Za-z0-9_.-]`, not preceded by a letter or digit. Trailing `.` and `-`
- * are not part of the ID.
- */
-const MENTION = /@(@?[A-Za-z0-9_.-]+)/g;
+/** `@user_id` or `#room_id`; trailing `.` and `-` are kept outside the ID. */
+const MENTION = /@(@?[A-Za-z0-9_.-]+)|#([A-Za-z0-9_.-]+)/g;
 
 /**
  * A bare `http(s)://` link in escaped text: it runs to whitespace or an escaped
@@ -108,14 +105,14 @@ function markdown(source: string): string {
  * typed line breaks. Without a DOM to sanitize with (tests, prerendering) the
  * body is rendered as plain text instead, which needs no sanitizing.
  */
-export function renderMarkdown(source: string, resolve?: MentionResolver): string {
-	if (!DOMPurify.isSupported) return linkifyText(escapeHtml(source), resolve);
-	return sanitize(linkText(markdown(source), resolve));
+export function renderMarkdown(source: string, resolve?: MentionResolver, resolveRoom?: RoomMentionResolver): string {
+	if (!DOMPurify.isSupported) return linkifyText(escapeHtml(source), resolve, resolveRoom);
+	return sanitize(linkText(markdown(source), resolve, resolveRoom));
 }
 
 /** A plain body as HTML: escaped, with bare links and mentions linked. Line breaks are kept by CSS (`pre-wrap`). */
-export function renderPlain(source: string, resolve?: MentionResolver): string {
-	const html = linkifyText(escapeHtml(source), resolve);
+export function renderPlain(source: string, resolve?: MentionResolver, resolveRoom?: RoomMentionResolver): string {
+	const html = linkifyText(escapeHtml(source), resolve, resolveRoom);
 	return DOMPurify.isSupported ? sanitize(html) : html;
 }
 
@@ -124,27 +121,31 @@ function escapeHtml(value: string): string {
 }
 
 /** The markup of the design system's Mention component. */
+function roomChip(target: Extract<MentionTarget, { kind: 'room' }>, prefix = ''): string {
+	const label = `${prefix}${target.title}`;
+	const variant = prefix ? ' ap-mention-hash-room' : '';
+	return `<button type="button" class="ap-mention ap-mention-room${variant}" data-room-id="${escapeHtml(target.id)}" title="Open ${escapeHtml(target.title)}">${escapeHtml(label)}</button>`;
+}
+
 function mentionChip(target: MentionTarget): string {
-	if (target.kind === 'room') {
-		return `<button type="button" class="ap-mention ap-mention-room" data-room-id="${escapeHtml(target.id)}" title="Open ${escapeHtml(target.title)}">${escapeHtml(target.title)}</button>`;
-	}
+	if (target.kind === 'room') return roomChip(target);
 	const title = target.name !== target.id ? ` title="@${escapeHtml(target.id)}"` : '';
 	return `<span class="ap-mention${target.me ? ' ap-mention-me' : ''}" data-user-id="${escapeHtml(target.id)}"${title}>@${escapeHtml(target.name)}</span>`;
 }
 
 /**
- * Links bare URLs and `@id` in the rendered HTML's text, leaving tags,
+ * Links bare URLs, `@user_id`, and `#room_id` in rendered text, leaving tags,
  * attributes, code and existing links alone (which open in a new tab): an ID inside `<code>` is code,
  * not a mention.
  */
-function linkText(html: string, resolve?: MentionResolver): string {
+function linkText(html: string, resolve?: MentionResolver, resolveRoom?: RoomMentionResolver): string {
 	let out = '';
 	let index = 0;
 	let codeDepth = 0;
 	while (index < html.length) {
 		const tagStart = html.indexOf('<', index);
 		const text = html.slice(index, tagStart === -1 ? undefined : tagStart);
-		out += codeDepth > 0 ? text : linkifyText(text, resolve);
+		out += codeDepth > 0 ? text : linkifyText(text, resolve, resolveRoom);
 		if (tagStart === -1) break;
 		const tagEnd = html.indexOf('>', tagStart);
 		if (tagEnd === -1) {
@@ -168,7 +169,7 @@ function linkText(html: string, resolve?: MentionResolver): string {
  * Trailing punctuation is left out, as is a closing `)` with no opening one in
  * the link, so "(see https://example.com)." links just the URL.
  */
-function linkifyText(text: string, resolve?: MentionResolver): string {
+function linkifyText(text: string, resolve?: MentionResolver, resolveRoom?: RoomMentionResolver): string {
 	let out = '';
 	let index = 0;
 	for (const match of text.matchAll(BARE_URL)) {
@@ -180,11 +181,11 @@ function linkifyText(text: string, resolve?: MentionResolver): string {
 			if (url === trimmed) break;
 		}
 		if (!/^https?:\/\/[^/?#]/i.test(url)) continue;
-		out += chipText(emojiText(text.slice(index, match.index)), resolve);
+		out += chipText(emojiText(text.slice(index, match.index)), resolve, resolveRoom);
 		out += `<a href="${url}"${LINK_ATTRS}>${url}</a>`;
 		index = match.index + url.length;
 	}
-	return out + chipText(emojiText(text.slice(index)), resolve);
+	return out + chipText(emojiText(text.slice(index)), resolve, resolveRoom);
 }
 
 /**
@@ -195,16 +196,24 @@ function emojiText(text: string): string {
 	return text.replace(EMOJI, (emoji) => `<span class="ap-emoji">${emoji}</span>`);
 }
 
-/** Replaces mentions in escaped text. Escaped entities never contain ID characters after an `@`. */
-function chipText(text: string, resolve?: MentionResolver): string {
-	if (!resolve) return text;
-	return text.replace(MENTION, (match, raw: string, offset: number) => {
+/** Replaces known users and rooms in escaped text; entities never contain ID characters. */
+function chipText(text: string, resolve?: MentionResolver, resolveRoom?: RoomMentionResolver): string {
+	if (!resolve && !resolveRoom) return text;
+	return text.replace(MENTION, (match, rawUser: string | undefined, rawRoom: string | undefined, offset: number) => {
 		const before = text[offset - 1];
-		if (before !== undefined && /[A-Za-z0-9]/.test(before)) return match;
-		const id = raw.replace(/[.-]+$/, '');
-		if (!id || id === '@') return match;
-		const target = resolve(id);
-		const rest = raw.slice(id.length);
-		return target ? mentionChip(target) + rest : match;
+		if (rawUser !== undefined) {
+			if (before !== undefined && /[A-Za-z0-9]/.test(before)) return match;
+			const id = rawUser.replace(/[.-]+$/, '');
+			if (!id || id === '@') return match;
+			const target = resolve?.(id);
+			const rest = rawUser.slice(id.length);
+			return target ? mentionChip(target) + rest : match;
+		}
+		if (before !== undefined && /[A-Za-z0-9_]/.test(before)) return match;
+		if (rawRoom === undefined) return match;
+		const id = rawRoom.replace(/[.-]+$/, '');
+		if (!id) return match;
+		const target = resolveRoom?.(id) ?? resolve?.(id);
+		return target?.kind === 'room' ? roomChip(target, '#') + rawRoom.slice(id.length) : match;
 	});
 }

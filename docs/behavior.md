@@ -7,6 +7,16 @@ The default connection is `VITE_DEFAULT_SERVER_URL` from the build, which
 `.env.production` sets to `wss://server.apron.chat/` for every production build
 (web.apron.chat and pull request Previews). Local development, and a build with
 `VITE_DEFAULT_SERVER_URL=` (empty), use same-origin `/ws` instead.
+
+`/__preview` mounts this same app against a page-local in-memory WebSocket
+server, not the saved, configured, or same-origin backend. It seeds a guest,
+rooms, a thread, people, Markdown examples, and a message moved into the thread,
+and implements the app's protocol
+requests (auth, room listings/history, messages, reactions, room changes,
+profile updates, activity, commands, and ping). Changes last only for the page
+lifetime; the preview does not advertise upload or streaming capabilities.
+Local development and builds with an empty `VITE_DEFAULT_SERVER_URL` retain the
+same-origin default.
 After a failed WebSocket handshake, the client makes a bounded HTTP diagnostic
 request to the same URL with `?apron_connection_status=1`. Supporting servers
 can expose a capacity error and `Retry-After` through CORS; the client displays
@@ -90,8 +100,10 @@ one ending the draft collapses on send. Chips are always sent as `@user_id`, so
 the field reads by name while the wire stays ID-based, and each chip's `user_id`
 goes in `body.mentions` ([PROTOCOL.md §3.5](https://github.com/shazow/apron/blob/main/PROTOCOL.md#35-messages)): a chip deleted before sending mentions no one,
 and an edit resubmits the message's mentions. A rendered body (plain or Markdown, never inside
-code) shows a known user's mention as a chip with their current name, a room's
-as a link that opens it (or joins it), and unknown IDs as written. A fenced
+code) shows a known user's mention as a chip with their current name, a `#room_id`
+(or legacy `@room_id`) as a link that opens the room (or joins it), and unknown
+IDs as written. Typing `#` in the composer opens room autocomplete over known
+rooms and threads, searchable by title or ID; choosing one inserts its `#room_id`. A fenced
 code block that names a known language (` ```ts `, ` ```py `, ` ```diff `, …)
 is syntax-highlighted once that language's highlighter loads, fetched the first
 time a block needs it; other blocks stay plain. Only
@@ -186,16 +198,20 @@ defaults; a pick toggles your reaction with that emoji. Reactions show as chips 
 highlighted when one is yours, with a tooltip naming who reacted. Clicking a
 chip toggles your reaction. Tombstones show no reactions.
 
-The composer's emoji button (always there: emoji are text) opens the same
-picker and inserts the emoji at the caret, over any selection, leaving mention
-chips and command mode as they were. The picker is
+Typing `:shortcode` in the composer opens an emoji autocomplete; arrows move,
+Tab or Enter inserts the highlighted native emoji in place of the shortcode,
+and Escape dismisses it. Suggestions search emoji shortcodes, names, aliases and
+keywords. The composer's emoji button (always there: emoji are text) opens the
+same full picker and inserts the emoji at the caret, over any selection,
+leaving mention chips and command mode as they were. The picker is
 [emoji-mart](https://github.com/missive/emoji-mart), drawn by `EmojiPopover`
 outside the app shell so nothing clips it: a popover beside its button on wide
 screens, a bottom sheet on narrow ones, in the app's theme and tokens. Escape
-or a press outside closes it. emoji-mart and `@emoji-mart/data` load with a
-dynamic `import()` the first time a picker opens, so they stay out of the main
-bundle, and the picker gets its data, English strings and native glyphs passed
-in, so it never fetches from a CDN.
+or a press outside closes it. The emoji data loads with a dynamic `import()`
+when shortcode autocomplete is first used; emoji-mart itself loads dynamically
+the first time the full picker opens. Both stay out of the main bundle, and the
+picker gets its data, English strings and native glyphs passed in, so it never
+fetches from a CDN.
 
 Embeds render by kind, in the design system's components ([PROTOCOL.md §4.6](https://github.com/shazow/apron/blob/main/PROTOCOL.md#46-embeds-and-avatars)):
 

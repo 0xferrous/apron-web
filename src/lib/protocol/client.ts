@@ -47,7 +47,8 @@ import {
 	type RoomPatch,
 	type RoomResult,
 	type SendOptions,
-	type UploadState
+	type UploadState,
+	type WebSocketFactory
 } from './client-types';
 import {
 	AUTOFILL_CHALLENGE_MS,
@@ -196,6 +197,7 @@ export class ChatClient {
 	 */
 	private joinedListing?: { id: string; since?: string; userId?: string };
 	private socket?: WebSocket;
+	private readonly webSocketFactory: WebSocketFactory;
 	private reconnectTimer?: ReturnType<typeof setTimeout>;
 	private pingTimer?: ReturnType<typeof setInterval>;
 	/** Resets the reconnect backoff once the current connection has stayed up. */
@@ -238,14 +240,15 @@ export class ChatClient {
 	private connectionProbe?: AbortController;
 	private disconnectedAt?: number;
 
-	constructor(private serverUrl: string, displayName = '') {
+	constructor(private serverUrl: string, displayName = '', webSocketFactory: WebSocketFactory = (url) => new WebSocket(url)) {
+		this.webSocketFactory = webSocketFactory;
 		this.displayName = displayName.trim();
 		this.loadStoredSession();
 		this.passkeyHint = this.loadPasskeyHint();
 	}
 
 	static fromOptions(options: ChatClientOptions): ChatClient {
-		const client = new ChatClient(options.serverUrl, options.displayName);
+		const client = new ChatClient(options.serverUrl, options.displayName, options.webSocketFactory);
 		if (options.onChange) client.subscribe(options.onChange);
 		return client;
 	}
@@ -1491,7 +1494,7 @@ export class ChatClient {
 		this.emit();
 		let socket: WebSocket;
 		try {
-			socket = new WebSocket(this.serverUrl);
+			socket = this.webSocketFactory(this.serverUrl);
 		} catch (cause) {
 			this.handleConnectionFailure(id, cause instanceof Error ? cause.message : 'Unable to open WebSocket');
 			return;

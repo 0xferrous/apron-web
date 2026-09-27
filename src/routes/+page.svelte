@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount, tick, untrack } from 'svelte';
 	import { passkeySupportError } from '$lib/protocol/webauthn';
+	import { previewWebSocketFactory } from '$lib/preview/memory-server';
 	import { ChatClient, childRooms, defaultWebSocketUrl, findMessage, normalizeWebSocketUrl, timelineMessages, type RoomSnapshot } from '$lib/protocol/client';
 	import { serverOrigin } from '$lib/protocol/embeds';
 	import { compareLogIds } from '$lib/protocol/reducer';
@@ -87,6 +88,7 @@
 	const sidebar = new SidebarLayout();
 
 	let client = $state<ChatClient | undefined>();
+	let previewMode = $state(false);
 	let serverInput = $state('');
 	let displayName = $state('');
 	/** The `user_id`s the composer's chips mention (§3.5), sent as `body.mentions`. */
@@ -150,6 +152,13 @@
 	/** Writing here: posting, replying, reacting, and editing threads. A guest who only reads can't. */
 	let canCompose = $derived(paneReady && !session.readOnly);
 	let people = $derived(peopleIn([...(activeThread ? timelineMessages(activeRoom) : []), ...(intro ? [intro] : []), ...messages], session.you, paneRoom?.members));
+	let roomSuggestions = $derived.by(() => {
+		const rooms = new Map<string, { id: string; title: string }>();
+		for (const room of [...(snapshot.directory ?? []), ...Object.values(snapshot.threadDirectory).flat(), ...session.rooms]) {
+			rooms.set(room.id, { id: room.id, title: room.title });
+		}
+		return [...rooms.values()];
+	});
 	let typingNames = $derived(snapshot.typing
 		.filter((entry) => entry.room === paneRoom?.id && entry.from.user_id !== session.you?.user_id)
 		.map((entry) => directory.name(entry.from)));
@@ -358,14 +367,15 @@
 
 	onMount(() => {
 		passkeyUnavailable = passkeySupportError();
+		previewMode = window.location.pathname === '/__preview' || window.location.pathname.startsWith('/__preview/');
 		sidebar.load();
 		const memberListMedia = window.matchMedia('(min-width: 960px)');
 		memberListOpen = memberListMedia.matches;
 		const memberListMediaChange = (event: MediaQueryListEvent) => (memberListOpen = event.matches);
 		memberListMedia.addEventListener('change', memberListMediaChange);
-		serverInput = loadServerUrl() ?? defaultWebSocketUrl(window.location);
-		displayName = loadDisplayName();
-		recentServers = loadRecentServers();
+		serverInput = previewMode ? 'ws://apron-preview.invalid' : loadServerUrl() ?? defaultWebSocketUrl(window.location);
+		displayName = previewMode ? 'Preview User' : loadDisplayName();
+		recentServers = previewMode ? [] : loadRecentServers();
 		notificationsEnabled = loadNotificationsEnabled();
 		notificationScope = loadNotificationScope();
 		notificationState = notificationPermission();
@@ -376,7 +386,11 @@
 			permission = status;
 			status.onchange = refreshNotificationPermission;
 		}).catch(() => undefined);
-		const chat = new ChatClient(normalizeWebSocketUrl(serverInput, window.location), displayName);
+		const chat = new ChatClient(
+			normalizeWebSocketUrl(serverInput, window.location),
+			displayName,
+			previewMode ? previewWebSocketFactory : undefined
+		);
 		const unsubscribe = chat.subscribe((next) => {
 			session.apply(next, chat);
 			directory.apply(next, serverOrigin(chat.url));
@@ -404,6 +418,7 @@
 
 	/** The profile's "Sign in with a passkey" opens here too, carrying the handle typed there. */
 	function openConnect(options: { passkey?: boolean; name?: string } = {}): void {
+		if (previewMode) return;
 		connectScheme = options.passkey ? 'webauthn' : undefined;
 		if (options.name) displayName = options.name;
 		connectOpen = true;
@@ -498,6 +513,7 @@
 	}
 
 	function connected(): void {
+		if (previewMode) return;
 		if (client) recentServers = rememberServer(recentServers, client.url, session.server?.name || backendHost(client.url) || undefined);
 		connectOpen = false;
 	}
@@ -1244,6 +1260,7 @@
 					canUpload={snapshot.capabilities['embed:upload']}
 					canCommand={snapshot.capabilities.command}
 					{people}
+					rooms={roomSuggestions}
 					replyPreview={drafts.reply ? replyPreview(drafts.reply) : undefined}
 					oninput={composerInput} onsend={sendMessage} onfiles={sendFiles} oncancelreply={cancelReply}
 					onmention={() => listMembers(MEMBERS_FRESH_MS)}

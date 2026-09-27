@@ -16,7 +16,7 @@
 
 	let text = $derived(typeof notice.body?.text === 'string' ? notice.body.text : '');
 	let markdown = $derived(notice.body?.format === 'markdown');
-	let body = $derived(markdown ? renderMarkdown(text, directory.resolve) : renderPlain(text, directory.resolve));
+	let body = $derived(markdown ? renderMarkdown(text, directory.resolve, directory.resolveRoom) : renderPlain(text, directory.resolve, directory.resolveRoom));
 	let at = $derived(String(notice.at));
 
 	function click(event: MouseEvent): void {

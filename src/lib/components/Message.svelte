@@ -98,7 +98,7 @@
 	let text = $derived(textOf(event));
 	let embeds = $derived(embedsOf(event));
 	let system = $derived(isSystem(event));
-	let body = $derived(event.body?.format === 'markdown' ? renderMarkdown(text, directory.resolve) : renderPlain(text, directory.resolve));
+	let body = $derived(event.body?.format === 'markdown' ? renderMarkdown(text, directory.resolve, directory.resolveRoom) : renderPlain(text, directory.resolve, directory.resolveRoom));
 	let selectable = $derived(selecting && caps.select);
 	let picked = $derived(selectable && selected);
 	let replyId = $derived(event.reply_to?.message_id);
