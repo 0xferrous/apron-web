@@ -1231,7 +1231,8 @@
 					bind:mentions={composerMentions}
 					bind:dismissed={composerDismissed}
 					placeholder={activeThread ? `Reply in ${threadTitle(activeThread)}` : `Message ${activeRoom.title}`}
-					disabled={!canCompose}
+					disabled={session.readOnly}
+					sendDisabled={!canCompose}
 					canUpload={snapshot.capabilities['embed:upload']}
 					canCommand={snapshot.capabilities.command}
 					{people}

@@ -31,6 +31,7 @@
 		dismissed?: string[];
 		placeholder: string;
 		disabled: boolean;
+		sendDisabled?: boolean;
 		/** Attachments and voice clips (cap `embed:upload`, §4.6.4): each file goes out as an `upload` embed. */
 		canUpload: boolean;
 		/**
@@ -50,7 +51,7 @@
 		/** The mention picker opened: a moment to refresh who can be named. */
 		onmention?: () => void;
 	}
-	let { value = $bindable(), mentions = $bindable([]), dismissed = $bindable([]), placeholder, disabled, canUpload, canCommand = false, people, replyPreview, oninput, onsend, onfiles, oncancelreply, onmention }: Props = $props();
+	let { value = $bindable(), mentions = $bindable([]), dismissed = $bindable([]), placeholder, disabled, sendDisabled = false, canUpload, canCommand = false, people, replyPreview, oninput, onsend, onfiles, oncancelreply, onmention }: Props = $props();
 
 	let field = $state<HTMLDivElement | undefined>();
 	let attachInput = $state<HTMLInputElement | undefined>();
@@ -273,6 +274,7 @@
 	}
 
 	function send(): void {
+		if (sendDisabled) return;
 		query = undefined;
 		collapse(true);
 		onsend();
@@ -514,7 +516,7 @@
 				<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01" /></svg>
 			</button>
 		</span>
-		<button class="ap-btn ap-btn-primary ap-btn-sm" data-testid="send-button" type="submit" aria-label={command ? 'Run command' : 'Send message'} disabled={disabled || recording || !value.trim()}>{command ? 'Run' : 'Send'}</button>
+		<button class="ap-btn ap-btn-primary ap-btn-sm" data-testid="send-button" type="submit" aria-label={command ? 'Run command' : 'Send message'} disabled={disabled || sendDisabled || recording || !value.trim()}>{command ? 'Run' : 'Send'}</button>
 	</form>
 </div>
 
