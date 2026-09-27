@@ -64,6 +64,9 @@
 	}
 	let { value = $bindable(), mentions = $bindable([]), dismissed = $bindable([]), placeholder, disabled, canUpload, canCommand = false, people, rooms = [], reply, oninput, onsend, onfiles, oncancelreply, onmention }: Props = $props();
 
+	/** Unique per composer, for the open picker's ID. */
+	const uid = $props.id();
+	const pickerId = `${uid}-suggestions`;
 	let field = $state<HTMLDivElement | undefined>();
 	let attachInput = $state<HTMLInputElement | undefined>();
 	let emojiButton = $state<HTMLButtonElement | undefined>();
@@ -97,11 +100,15 @@
 	let roomPickerOpen = $derived(roomFound !== undefined && !disabled);
 	/** Opens once the emoji data has loaded, rather than showing "no match" meanwhile. */
 	let emojiPickerOpen = $derived(emojiFound !== undefined && emojiData !== undefined && !disabled);
-	/** The open picker (at most one is): how many suggestions it has, and how to take one. */
-	let completion = $derived.by((): { count: number; take: (index: number) => void } | undefined => {
-		if (pickerOpen) return { count: matches.length, take: (index) => pick(matches[index]) };
-		if (roomPickerOpen) return { count: roomMatches.length, take: (index) => pickRoom(roomMatches[index]) };
-		if (emojiPickerOpen) return { count: emojiMatches.length, take: (index) => pickEmoji(emojiMatches[index]) };
+	/**
+	 * The open picker (at most one is): how many suggestions it has, how to
+	 * take one, and whether Enter does (Tab always does). A bare `#` lists
+	 * rooms to browse, but Enter there still sends or breaks the line.
+	 */
+	let completion = $derived.by((): { count: number; take: (index: number) => void; enter: boolean } | undefined => {
+		if (pickerOpen) return { count: matches.length, take: (index) => pick(matches[index]), enter: true };
+		if (roomPickerOpen) return { count: roomMatches.length, take: (index) => pickRoom(roomMatches[index]), enter: roomFound?.query !== '' };
+		if (emojiPickerOpen) return { count: emojiMatches.length, take: (index) => pickEmoji(emojiMatches[index]), enter: true };
 		return undefined;
 	});
 	let activeIndex = $derived(Math.min(active, Math.max(0, (completion?.count ?? 0) - 1)));
@@ -360,7 +367,7 @@
 					active = (activeIndex + step) % completion.count;
 					return;
 				}
-				if (event.key === 'Tab' || (event.key === 'Enter' && !event.shiftKey)) {
+				if (event.key === 'Tab' || (event.key === 'Enter' && !event.shiftKey && completion.enter)) {
 					event.preventDefault();
 					completion.take(activeIndex);
 					return;
@@ -590,6 +597,7 @@
 <div class="wrap">
 	{#if pickerOpen}
 		<AutocompletePicker
+			id={pickerId}
 			items={matches}
 			active={activeIndex}
 			label="Mention someone"
@@ -612,6 +620,7 @@
 		</AutocompletePicker>
 	{:else if roomPickerOpen}
 		<AutocompletePicker
+			id={pickerId}
 			items={roomMatches}
 			active={activeIndex}
 			label="Room suggestions"
@@ -628,6 +637,7 @@
 		</AutocompletePicker>
 	{:else if emojiPickerOpen}
 		<AutocompletePicker
+			id={pickerId}
 			items={emojiMatches}
 			active={activeIndex}
 			label="Emoji suggestions"
@@ -677,6 +687,8 @@
 				aria-placeholder={placeholder}
 				aria-disabled={disabled}
 				aria-autocomplete="list"
+				aria-controls={completion ? pickerId : undefined}
+				aria-activedescendant={completion?.count ? `${pickerId}-${activeIndex}` : undefined}
 				data-placeholder={placeholder}
 				tabindex={disabled ? -1 : 0}
 				contenteditable={disabled ? 'false' : 'plaintext-only'}

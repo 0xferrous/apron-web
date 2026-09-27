@@ -90,7 +90,7 @@ The Member list button at the end of the room title bar toggles a right-hand
 sidebar listing the open room's or thread's members from its `room_list`
 snapshot. On wide screens it is a column that resizes like the rooms list:
 drag its left border, or click the border to collapse it (the header button
-brings it back), and its width and whether it is collapsed are remembered.
+brings it back, and takes focus when the border collapsed it from the keyboard), and its width and whether it is collapsed are remembered.
 Dragging either list shut restores its earlier width when it reopens. On
 narrow screens it overlays the conversation, starts closed, and hides with
 the conversation on the phone's rooms pane. It shows no
@@ -112,7 +112,8 @@ and an edit resubmits the message's mentions. A rendered body (plain or Markdown
 code) shows a known user's mention as a chip with their current name, a `#room_id`
 (or the protocol's `@room_id`) as a link that opens the room (or joins it), and unknown
 IDs as written. Typing `#` in the composer opens room autocomplete over known
-rooms and threads, searchable by title or ID; choosing one inserts a chip
+rooms and threads, searchable by title or ID (a bare `#` lists them to browse, and
+Enter there still sends; Tab picks); choosing one inserts a chip
 showing `#title` that is sent as `#room_id`, and a typed `#room_id` naming a
 known room collapses into the same chip once finished (it mentions no one).
 Backspace right after either kind of chip turns it back into the text it

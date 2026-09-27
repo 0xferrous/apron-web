@@ -132,6 +132,7 @@
 	 */
 	let memberListOpen = $derived(memberListWide ? !memberList.collapsed : memberListOverlay);
 	let composer = $state<Composer | undefined>();
+	let roomHeader = $state<RoomHeader | undefined>();
 	let messageScroll = $state<HTMLDivElement | undefined>();
 	let stickToBottom = $state(true);
 	let latestVisible = $state(true);
@@ -1134,6 +1135,7 @@
 	<main class="ap-shell-main" aria-label="Conversation">
 		{#if activeRoom}
 			<RoomHeader
+				bind:this={roomHeader}
 				room={activeRoom}
 				pane={paneRoom ?? activeRoom}
 				threadTitle={activeThread ? threadTitle(activeThread) : undefined}
@@ -1304,7 +1306,7 @@
 	</main>
 	<MemberListSidebar {session} room={paneRoom} open={memberListOpen} />
 	<!-- Kept through a drag that collapses the list, so the drag still ends on it. -->
-	{#if memberListWide && (memberListOpen || memberList.resizing)}<SidebarHandle layout={memberList} name="member list" />{/if}
+	{#if memberListWide && (memberListOpen || memberList.resizing)}<SidebarHandle layout={memberList} name="member list" oncollapse={() => roomHeader?.focusMemberListToggle()} />{/if}
 
 	{#if feedback.current}
 		<div class="toast">

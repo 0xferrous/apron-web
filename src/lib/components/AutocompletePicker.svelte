@@ -2,6 +2,8 @@
 	import type { Snippet } from 'svelte';
 
 	interface Props<T> {
+		/** The list's ID, which the field names in `aria-controls`; option `i` is `${id}-${i}`, its `aria-activedescendant`. */
+		id: string;
 		items: T[];
 		active: number;
 		label: string;
@@ -12,7 +14,7 @@
 		onhover: (index: number) => void;
 		row: Snippet<[T]>;
 	}
-	let { items, active, label, testid, emptyText, getKey, onpick, onhover, row }: Props<T> = $props();
+	let { id, items, active, label, testid, emptyText, getKey, onpick, onhover, row }: Props<T> = $props();
 	let listbox = $state<HTMLUListElement>();
 
 	// Keep keyboard navigation visible when the suggestion list scrolls.
@@ -24,14 +26,15 @@
 </script>
 
 {#if items.length === 0}
-	<div class="ap-mpick" role="listbox" aria-label={label} data-testid={testid}>
+	<div class="ap-mpick" {id} role="listbox" aria-label={label} data-testid={testid}>
 		<div class="ap-mpick-empty">{emptyText}</div>
 	</div>
 {:else}
-	<ul class="ap-mpick" role="listbox" aria-label={label} data-testid={testid} bind:this={listbox}>
+	<ul class="ap-mpick" {id} role="listbox" aria-label={label} data-testid={testid} bind:this={listbox}>
 		{#each items as item, index (getKey(item))}
 			<!-- svelte-ignore a11y_click_events_have_key_events -->
 			<li
+				id={`${id}-${index}`}
 				role="option"
 				aria-selected={index === active}
 				class="ap-mpick-item"

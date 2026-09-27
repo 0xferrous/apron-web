@@ -8,7 +8,19 @@
 	 * the list so it never covers the conversation's scrollbar (and so, once
 	 * collapsed, the list reopens from the room header instead).
 	 */
-	let { layout, name = 'sidebar' }: { layout: SidebarLayout; name?: string } = $props();
+	interface Props {
+		layout: SidebarLayout;
+		name?: string;
+		/** Collapsed from the keyboard, where the handle may go with the panel: a place to move focus to. */
+		oncollapse?: () => void;
+	}
+	let { layout, name = 'sidebar', oncollapse }: Props = $props();
+
+	/** Enter or Space (a click with no pointer) toggles; pointer clicks toggle in startResize. */
+	function keyToggle(): void {
+		layout.toggle();
+		if (layout.collapsed) oncollapse?.();
+	}
 </script>
 
 <button
@@ -21,7 +33,7 @@
 	aria-expanded={!layout.collapsed}
 	title={layout.collapsed ? `Expand ${name}` : 'Drag to resize, click to collapse'}
 	onpointerdown={(event) => layout.startResize(event)}
-	onclick={(event) => { if (event.detail === 0) layout.toggle(); }}
+	onclick={(event) => { if (event.detail === 0) keyToggle(); }}
 	onkeydown={(event) => layout.handleKey(event)}
 ></button>
 

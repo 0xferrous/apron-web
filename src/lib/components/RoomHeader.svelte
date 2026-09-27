@@ -36,6 +36,13 @@
 		room, pane, threadTitle, typing, replyCount, moreReplies = false, canEditThread, editorOpen, editDisabled, canLeave, canJoin = false,
 		memberListOpen, onback, onroom, onedit, onleave, onjoin, onmemberlist
 	}: Props = $props();
+
+	let memberListToggle = $state<HTMLButtonElement | undefined>();
+
+	/** Where focus goes when the member list collapses from under it. */
+	export function focusMemberListToggle(): void {
+		memberListToggle?.focus();
+	}
 </script>
 
 <header class="ap-roomhead">
@@ -74,7 +81,7 @@
 			{/if}
 		</div>
 	{/if}
-	<button class="ap-iconbtn member-list-toggle" class:member-list-toggle-open={memberListOpen} type="button" aria-label={memberListOpen ? 'Hide member list' : 'Show member list'} aria-expanded={memberListOpen} title={memberListOpen ? 'Hide member list' : 'Show member list'} onclick={onmemberlist}>
+	<button bind:this={memberListToggle} class="ap-iconbtn member-list-toggle" class:member-list-toggle-open={memberListOpen} type="button" aria-label={memberListOpen ? 'Hide member list' : 'Show member list'} aria-expanded={memberListOpen} title={memberListOpen ? 'Hide member list' : 'Show member list'} onclick={onmemberlist}>
 		<Users size={18} strokeWidth={1.8} aria-hidden="true" />
 	</button>
 </header>
