@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { onMount, tick, untrack } from 'svelte';
+	import { pushState, replaceState } from '$app/navigation';
+	import { page } from '$app/state';
 	import { passkeySupportError } from '$lib/protocol/webauthn';
 	import { ChatClient, childRooms, defaultWebSocketUrl, findMessage, normalizeWebSocketUrl, timelineMessages, type RoomSnapshot, type WebSocketFactory } from '$lib/protocol/client';
 	import { serverOrigin } from '$lib/protocol/embeds';
@@ -200,6 +202,12 @@
 	$effect(() => {
 		const roomId = activeRoom?.id;
 		if (roomId !== undefined && selectedRoomId !== roomId) setDestination(roomId, undefined);
+	});
+
+	// Back and Forward move between the destinations setDestination recorded.
+	$effect(() => {
+		const { room, thread } = page.state;
+		if (room !== undefined) untrack(() => revisit(room, thread));
 	});
 
 	$effect(() => {
@@ -552,9 +560,14 @@
 		return JSON.stringify([client?.url ?? serverInput, roomId]);
 	}
 
-	/** Moves the pane to a room or one of its threads, keeping each destination's draft and reply. */
-	function setDestination(roomId: string, thread: string | undefined): void {
+	/**
+	 * Moves the pane to a room or one of its threads, keeping each destination's
+	 * draft and reply. Each move is a history entry, so Back returns to the
+	 * previous room or thread; the first one replaces the entry the page opened with.
+	 */
+	function setDestination(roomId: string, thread: string | undefined, history: 'push' | 'replace' = 'push'): void {
 		if (selectedRoomId === roomId && activeThread === thread) return;
+		recordDestination(roomId, thread, selectedRoomId === undefined ? 'replace' : history);
 		selectedRoomId = roomId;
 		activeThread = thread;
 		drafts.open(draftKey(thread ?? roomId));
@@ -570,6 +583,35 @@
 		reveal.from(thread ? 0 : timeline.length - FIRST_PAINT_ITEMS);
 	}
 
+	/** Writes the destination into the page's history entry, unless it is already there. */
+	function recordDestination(roomId: string, thread: string | undefined, history: 'push' | 'replace'): void {
+		if (page.state.room === roomId && page.state.thread === thread) return;
+		try {
+			(history === 'push' ? pushState : replaceState)('', thread ? { room: roomId, thread } : { room: roomId });
+		} catch {
+			// The router isn't started yet (in development): this destination just isn't recorded.
+		}
+	}
+
+	/**
+	 * Returns to a destination from the history. A room left since can't be
+	 * shown, so its entry becomes the current destination; a thread left since
+	 * is read without joining, or else its room opens instead.
+	 */
+	function revisit(roomId: string, thread: string | undefined): void {
+		if (!client || (selectedRoomId === roomId && activeThread === thread)) return;
+		const listed = (id: string) => session.rooms.some((room) => room.id === id);
+		if (!listed(roomId)) {
+			if (selectedRoomId !== undefined) recordDestination(selectedRoomId, activeThread, 'replace');
+			return;
+		}
+		if (thread && !listed(thread) && !client.viewRoom(thread)) thread = undefined;
+		if (activeRoom?.id !== roomId) session.chooseRoom(client, roomId);
+		if (thread) showThread(roomId, thread, 'replace');
+		else setDestination(roomId, undefined, 'replace');
+		mobilePane = 'main';
+	}
+
 	/** Opens a room, or a thread under it, switching the top-level room first when it differs. */
 	function openDestination(roomId: string, thread: string | undefined): void {
 		if (!client) return;
@@ -580,15 +622,20 @@
 
 	function chooseThread(thread: string): void {
 		if (!activeRoom) return;
-		setDestination(activeRoom.id, thread);
+		showThread(activeRoom.id, thread);
+		mobilePane = 'main';
+		composer?.focus();
+	}
+
+	/** Shows a thread from its intro at the top, loading it again if its last load failed. */
+	function showThread(roomId: string, thread: string, history: 'push' | 'replace' = 'push'): void {
+		setDestination(roomId, thread, history);
 		stickToBottom = false;
 		seenCount = messages.length;
 		openingThread = thread;
 		requestAnimationFrame(() => { if (messageScroll) messageScroll.scrollTop = 0; });
 		// A failed load stays failed until the thread is opened again.
 		if (session.rooms.find((room) => room.id === thread)?.recoveryError) loadThread(thread);
-		mobilePane = 'main';
-		composer?.focus();
 	}
 
 	/**
