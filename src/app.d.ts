@@ -5,7 +5,11 @@ declare global {
 		// interface Error {}
 		// interface Locals {}
 		// interface PageData {}
-		// interface PageState {}
+		/** The room, and thread under it, a history entry returns to. */
+		interface PageState {
+			room?: string;
+			thread?: string;
+		}
 		// interface Platform {}
 	}
 }

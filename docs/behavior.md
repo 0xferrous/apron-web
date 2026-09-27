@@ -191,6 +191,11 @@ reply, shows "N+ replies", and loads the page before whenever the reader nears
 the top, keeping what is on screen in place. Drafts are kept per room, threads
 included.
 
+Each room or thread opened is a browser history entry (the URL stays the same),
+so Back returns to the previous room or thread, and Forward the other way, until
+Back leaves the page from the first room opened. A room left since stays put
+for that step, and a thread left since is read without joining.
+
 With the `rooms` cap the header also offers **Leave**, which leaves the room or
 the thread; a thread is a room of its own, so leaving its parent keeps it.
 **Browse rooms** in the sidebar lists, via `room_list` with
