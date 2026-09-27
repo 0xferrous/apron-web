@@ -1,19 +1,39 @@
-import { loadSidebarPrefs, saveSidebarPrefs } from './storage';
+import type { SidebarPrefs } from './storage';
 
-const MIN_W = 160;
-const MAX_W = 480;
-const DEFAULT_W = 248;
 const KEY_STEP = 16;
 
-/** The sidebar's width, user-resizable by dragging its right border; a plain click on the border collapses or expands it. */
+export interface SidebarOptions {
+	/** The screen edge the panel sits on; its resizable border faces the conversation. */
+	side: 'left' | 'right';
+	defaultWidth: number;
+	minWidth: number;
+	maxWidth: number;
+	load: () => Partial<SidebarPrefs>;
+	save: (prefs: SidebarPrefs) => void;
+}
+
+/**
+ * A side panel's width, user-resizable by dragging its inner border (the
+ * rooms list's right one, the member list's left one); a plain click on the
+ * border collapses or expands it, and dragging it under half the minimum
+ * width collapses it.
+ */
 export class SidebarLayout {
-	width = $state(DEFAULT_W);
+	width = $state(0);
 	collapsed = $state(false);
 	resizing = $state(false);
 
+	constructor(private readonly options: SidebarOptions) {
+		this.width = options.defaultWidth;
+	}
+
+	get side(): 'left' | 'right' {
+		return this.options.side;
+	}
+
 	load(): void {
-		const saved = loadSidebarPrefs();
-		if (saved.width !== undefined) this.width = clamp(saved.width);
+		const saved = this.options.load();
+		if (saved.width !== undefined) this.width = this.clamp(saved.width);
 		if (saved.collapsed !== undefined) this.collapsed = saved.collapsed;
 	}
 
@@ -28,19 +48,22 @@ export class SidebarLayout {
 		const handle = event.currentTarget as HTMLElement;
 		const startX = event.clientX;
 		const startWidth = this.collapsed ? 0 : this.width;
+		const restoreWidth = this.width;
+		// A right-hand panel grows as its border is dragged left.
+		const direction = this.options.side === 'left' ? 1 : -1;
 		let moved = false;
 		handle.setPointerCapture(event.pointerId);
 		this.resizing = true;
 		const onMove = (e: PointerEvent) => {
-			const dx = e.clientX - startX;
+			const dx = (e.clientX - startX) * direction;
 			if (!moved && Math.abs(dx) < 4) return;
 			moved = true;
 			const next = startWidth + dx;
-			if (next < MIN_W / 2) {
+			if (next < this.options.minWidth / 2) {
 				this.collapsed = true;
 			} else {
 				this.collapsed = false;
-				this.width = clamp(next);
+				this.width = this.clamp(next);
 			}
 		};
 		const onUp = () => {
@@ -50,6 +73,8 @@ export class SidebarLayout {
 			handle.releasePointerCapture(event.pointerId);
 			this.resizing = false;
 			if (!moved) this.collapsed = !this.collapsed;
+			// Dragged shut: reopening brings back the width it had, not the minimum it passed through.
+			else if (this.collapsed) this.width = restoreWidth;
 			this.save();
 		};
 		handle.addEventListener('pointermove', onMove);
@@ -57,23 +82,24 @@ export class SidebarLayout {
 		handle.addEventListener('pointercancel', onUp);
 	}
 
-	/** Arrows resize; Enter and Space toggle through the handle's native click. */
+	/** Arrows move the border (outward grows); Enter and Space toggle through the handle's native click. */
 	handleKey(event: KeyboardEvent): void {
 		if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
 		event.preventDefault();
+		const grow = event.key === (this.options.side === 'left' ? 'ArrowRight' : 'ArrowLeft');
 		if (this.collapsed) {
-			if (event.key === 'ArrowRight') this.collapsed = false;
+			if (grow) this.collapsed = false;
 		} else {
-			this.width = clamp(this.width + (event.key === 'ArrowLeft' ? -KEY_STEP : KEY_STEP));
+			this.width = this.clamp(this.width + (grow ? KEY_STEP : -KEY_STEP));
 		}
 		this.save();
 	}
 
 	private save(): void {
-		saveSidebarPrefs({ width: this.width, collapsed: this.collapsed });
+		this.options.save({ width: this.width, collapsed: this.collapsed });
 	}
-}
 
-function clamp(width: number): number {
-	return Math.min(MAX_W, Math.max(MIN_W, Math.round(width)));
+	private clamp(width: number): number {
+		return Math.min(this.options.maxWidth, Math.max(this.options.minWidth, Math.round(width)));
+	}
 }

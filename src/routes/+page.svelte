@@ -33,7 +33,7 @@
 	import { MessageSelection } from '$lib/ui/selection.svelte';
 	import { SessionView } from '$lib/ui/session.svelte';
 	import { SidebarLayout } from '$lib/ui/sidebar.svelte';
-	import { loadDisplayName, loadMemberListOpen, loadNotificationScope, loadNotificationsEnabled, loadRecentServers, loadServerUrl, rememberServer, saveDisplayName, saveMemberListOpen, saveNotificationScope, saveNotificationsEnabled, type RecentServer } from '$lib/ui/storage';
+	import { loadDisplayName, loadMemberListPrefs, loadNotificationScope, loadNotificationsEnabled, loadRecentServers, loadServerUrl, loadSidebarPrefs, rememberServer, saveDisplayName, saveMemberListPrefs, saveNotificationScope, saveNotificationsEnabled, saveSidebarPrefs, type RecentServer } from '$lib/ui/storage';
 	import { buildRoomTimeline, buildThreadTimeline, threadEntries, threadTitleFor } from '$lib/ui/timeline';
 	import { idDateTime, idIso, idTime } from '$lib/ui/time';
 	import { tabTitle } from '$lib/ui/attention';
@@ -84,7 +84,9 @@
 	/** Tells this tab's notifications apart from other tabs' when the service worker relays a click. */
 	const tabId = Math.random().toString(36).slice(2);
 	const selection = new MessageSelection();
-	const sidebar = new SidebarLayout();
+	const sidebar = new SidebarLayout({ side: 'left', defaultWidth: 248, minWidth: 160, maxWidth: 480, load: loadSidebarPrefs, save: saveSidebarPrefs });
+	/** The member list's width and, on wide screens, whether it's collapsed. */
+	const memberList = new SidebarLayout({ side: 'right', defaultWidth: 240, minWidth: 180, maxWidth: 420, load: loadMemberListPrefs, save: saveMemberListPrefs });
 
 	/** `/__preview` passes its in-memory server's sockets; every other visit connects for real. */
 	let { webSocketFactory }: { webSocketFactory?: WebSocketFactory } = $props();
@@ -120,12 +122,15 @@
 	/** Messages a thread is being started from, for the button's "Starting…". */
 	let startingThreads = $state<Record<string, true>>({});
 	let mobilePane = $state<'rooms' | 'main'>('main');
+	/** Wide screens give the member list a column of its own; narrower ones overlay it on the conversation. */
+	let memberListWide = $state(false);
+	/** The narrow overlay, closed until asked for. */
+	let memberListOverlay = $state(false);
 	/**
-	 * The member list: a column on wide screens, shown as last left there; an
-	 * overlay on narrow ones, closed until asked for.
+	 * The column is shown as last left (collapsed or not, and its width),
+	 * remembered for the next visit; the overlay isn't.
 	 */
-	let memberListOpen = $state(false);
-	let memberListWide = false;
+	let memberListOpen = $derived(memberListWide ? !memberList.collapsed : memberListOverlay);
 	let composer = $state<Composer | undefined>();
 	let messageScroll = $state<HTMLDivElement | undefined>();
 	let stickToBottom = $state(true);
@@ -376,10 +381,11 @@
 	onMount(() => {
 		passkeyUnavailable = passkeySupportError();
 		sidebar.load();
+		memberList.load();
 		const memberListMedia = window.matchMedia('(min-width: 960px)');
 		const memberListMediaChange = ({ matches }: { matches: boolean }) => {
 			memberListWide = matches;
-			memberListOpen = matches && loadMemberListOpen();
+			memberListOverlay = false;
 		};
 		memberListMediaChange(memberListMedia);
 		memberListMedia.addEventListener('change', memberListMediaChange);
@@ -748,10 +754,9 @@
 		composer?.focus();
 	}
 
-	/** Toggling on a wide screen is remembered for the next visit; the narrow overlay starts closed. */
 	function toggleMemberList(): void {
-		memberListOpen = !memberListOpen;
-		if (memberListWide) saveMemberListOpen(memberListOpen);
+		if (memberListWide) memberList.toggle();
+		else memberListOverlay = !memberListOverlay;
 	}
 
 	// --- Rooms ---
@@ -1112,10 +1117,11 @@
 <div
 	class="app ap-shell ap-shell-norail"
 	class:side-collapsed={sidebar.collapsed}
-	class:side-resizing={sidebar.resizing}
+	class:side-resizing={sidebar.resizing || memberList.resizing}
 	class:member-list-open={memberListOpen}
 	data-pane={mobilePane}
 	style:--sidebar-w="{sidebar.collapsed ? 0 : sidebar.width}px"
+	style:--member-list-w="{memberList.width}px"
 >
 	<Sidebar
 		{client} {session} {backendLabel} threads={listedThreads} {activeThread} mentions={mentions.byRoom} unread={unread.byRoom} bind:displayName {passkeyUnavailable}
@@ -1297,6 +1303,8 @@
 		{/if}
 	</main>
 	<MemberListSidebar {session} room={paneRoom} open={memberListOpen} />
+	<!-- Kept through a drag that collapses the list, so the drag still ends on it. -->
+	{#if memberListWide && (memberListOpen || memberList.resizing)}<SidebarHandle layout={memberList} name="member list" />{/if}
 
 	{#if feedback.current}
 		<div class="toast">
@@ -1340,7 +1348,7 @@
 
 	/* Wide screens give an open member list its own column; narrower ones overlay it. */
 	@media (min-width: 960px) {
-		.app.member-list-open { grid-template-columns: var(--sidebar-w) minmax(0, 1fr) 240px; }
+		.app.member-list-open { grid-template-columns: var(--sidebar-w) minmax(0, 1fr) var(--member-list-w); }
 	}
 	/* Under 720px it's one pane at a time: rooms, then the room or thread, pushed like pages. */
 	@media (max-width: 719px) {

@@ -83,9 +83,9 @@ export function rememberServer(recent: RecentServer[], url: string, label: strin
 	return next;
 }
 
-export function loadSidebarPrefs(): Partial<SidebarPrefs> {
+function loadPanelPrefs(key: string): Partial<SidebarPrefs> {
 	try {
-		const parsed: unknown = JSON.parse(read(KEY.sidebar) ?? '{}');
+		const parsed: unknown = JSON.parse(read(key) ?? '{}');
 		if (!isJsonObject(parsed)) return {};
 		return {
 			...(typeof parsed.width === 'number' && Number.isFinite(parsed.width) && parsed.width > 0 ? { width: parsed.width } : {}),
@@ -96,17 +96,21 @@ export function loadSidebarPrefs(): Partial<SidebarPrefs> {
 	}
 }
 
+export function loadSidebarPrefs(): Partial<SidebarPrefs> {
+	return loadPanelPrefs(KEY.sidebar);
+}
+
 export function saveSidebarPrefs(prefs: SidebarPrefs): void {
 	write(KEY.sidebar, JSON.stringify(prefs));
 }
 
-/** Whether the member list shows on wide screens; unset until toggled there, when it shows. */
-export function loadMemberListOpen(): boolean {
-	return read(KEY.memberList) !== 'false';
+/** The member list's width and whether it's collapsed on wide screens; narrow ones overlay it instead. */
+export function loadMemberListPrefs(): Partial<SidebarPrefs> {
+	return loadPanelPrefs(KEY.memberList);
 }
 
-export function saveMemberListOpen(open: boolean): void {
-	write(KEY.memberList, String(open));
+export function saveMemberListPrefs(prefs: SidebarPrefs): void {
+	write(KEY.memberList, JSON.stringify(prefs));
 }
 
 export function loadNotificationsEnabled(): boolean {

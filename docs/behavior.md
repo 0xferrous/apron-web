@@ -88,9 +88,12 @@ sender group.
 
 The Member list button at the end of the room title bar toggles a right-hand
 sidebar listing the open room's or thread's members from its `room_list`
-snapshot. On wide screens it is a column, open until you close it, and that
-choice is remembered; on narrow screens it overlays the conversation, starts
-closed, and hides with the conversation on the phone's rooms pane. It shows no
+snapshot. On wide screens it is a column that resizes like the rooms list:
+drag its left border, or click the border to collapse it (the header button
+brings it back), and its width and whether it is collapsed are remembered.
+Dragging either list shut restores its earlier width when it reopens. On
+narrow screens it overlays the conversation, starts closed, and hides with
+the conversation on the phone's rooms pane. It shows no
 typing or connection status.
 
 Mentions follow the `@user_id` convention ([PROTOCOL.md Appendix A.3](https://github.com/shazow/apron/blob/main/PROTOCOL.md#a3-mention-text)). Typing `@` in the

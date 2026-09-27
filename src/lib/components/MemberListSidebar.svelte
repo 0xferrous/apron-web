@@ -57,6 +57,6 @@
 	.member-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 	.member-name small { margin-left: 4px; color: var(--ink-muted); font-size: 11px; }
 	@media (max-width: 959px) {
-		.member-list.open { display: flex; position: absolute; z-index: 6; top: var(--header-h); right: 0; bottom: 0; width: min(280px, calc(100vw - 24px)); box-shadow: var(--shadow-float); }
+		.member-list.open { display: flex; position: absolute; z-index: 6; top: var(--header-h); right: 0; bottom: 0; width: min(var(--member-list-w, 280px), calc(100vw - 24px)); box-shadow: var(--shadow-float); }
 	}
 </style>
