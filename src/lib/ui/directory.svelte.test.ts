@@ -34,7 +34,7 @@ function renderRows(count: number): { renders: () => number; html: () => string[
 		for (let index = 0; index < count; index++) {
 			const body = $derived.by(() => {
 				renders++;
-				return renderMarkdown(`**hi** @bo, see @lobby (${index})`, directory.resolve);
+				return renderMarkdown(`**hi** @bo, see #lobby (${index})`, directory.resolve, directory.resolveRoom);
 			});
 			$effect(() => {
 				html[index] = body;

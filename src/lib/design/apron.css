@@ -466,6 +466,7 @@ a.ap-embed-ogcard:hover { background: var(--bg-300); }
 /* Room mentions and unknown mentions */
 .ap-mention-room { font: inherit; border: 0; cursor: pointer; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; }
 .ap-mention-room::before { content: "\21B3 "; font-weight: 400; }
+.ap-mention-hash-room::before { content: none; }
 .ap-mention-unknown { color: var(--ink-muted); }
 .ap-status-retry { color: var(--ink-muted); font-variant-numeric: tabular-nums; }
 .ap-profedit-avbtns { display: inline-flex; align-items: center; gap: var(--space-3); }

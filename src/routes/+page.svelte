@@ -148,6 +148,13 @@
 	/** Writing here: posting, replying, reacting, and editing threads. A guest who only reads can't. */
 	let canCompose = $derived(paneReady && !session.readOnly);
 	let people = $derived(peopleIn([...(activeThread ? timelineMessages(activeRoom) : []), ...(intro ? [intro] : []), ...messages], session.you, paneRoom?.members));
+	let roomSuggestions = $derived.by(() => {
+		const rooms = new Map<string, { id: string; title: string }>();
+		for (const room of [...(snapshot.directory ?? []), ...Object.values(snapshot.threadDirectory).flat(), ...session.rooms]) {
+			rooms.set(room.id, { id: room.id, title: room.title });
+		}
+		return [...rooms.values()];
+	});
 	let typingNames = $derived(snapshot.typing
 		.filter((entry) => entry.room === paneRoom?.id && entry.from.user_id !== session.you?.user_id)
 		.map((entry) => directory.name(entry.from)));
@@ -1235,6 +1242,7 @@
 					canUpload={snapshot.capabilities['embed:upload']}
 					canCommand={snapshot.capabilities.command}
 					{people}
+					rooms={roomSuggestions}
 					replyPreview={drafts.reply ? replyPreview(drafts.reply) : undefined}
 					oninput={composerInput} onsend={sendMessage} onfiles={sendFiles} oncancelreply={cancelReply}
 					onmention={() => listMembers(MEMBERS_FRESH_MS)}
