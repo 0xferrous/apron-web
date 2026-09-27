@@ -1,7 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { NOTIFICATION_CLICK, notificationClickTarget, showNotification } from './notifications';
+import { loadNotificationScope, NOTIFICATION_CLICK, notificationClickTarget, saveNotificationScope, showNotification } from './notifications';
+
+const values = new Map<string, string>();
+const storage = {
+	getItem: (key: string) => values.get(key) ?? null,
+	setItem: (key: string, value: string) => values.set(key, value)
+};
 
 afterEach(() => {
+	values.clear();
 	vi.unstubAllGlobals();
 });
 
@@ -41,5 +48,14 @@ describe('showing notifications', () => {
 		expect(notificationClickTarget({ type: NOTIFICATION_CLICK, target })).toEqual(target);
 		expect(notificationClickTarget({ type: 'other', target })).toBeUndefined();
 		expect(notificationClickTarget({ type: NOTIFICATION_CLICK, target: { tab: 't1', roomId: 'general' } })).toBeUndefined();
+	});
+});
+
+describe('notification scope preferences', () => {
+	it('defaults to mentions and persists the selected scope locally', () => {
+		vi.stubGlobal('localStorage', storage);
+		expect(loadNotificationScope()).toBe('mentions');
+		saveNotificationScope('everything');
+		expect(loadNotificationScope()).toBe('everything');
 	});
 });
