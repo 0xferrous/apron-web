@@ -99,6 +99,10 @@
 		createOpen = false;
 	}
 
+	function cancelCreateRoom(event: Event): void {
+		if (creatingRoom) event.preventDefault();
+	}
+
 	async function submitCreateRoom(event: SubmitEvent): Promise<void> {
 		event.preventDefault();
 		const title = createTitle.trim();
@@ -237,7 +241,7 @@
 	<ProfileBar {client} {session} {backendLabel} bind:displayName {passkeyUnavailable} {notificationsEnabled} {notificationsSupported} {notificationPermission} {notificationScope} {onnotifications} {onnotificationscope} {ontestnotifications} {onsignout} {onsignin} />
 </aside>
 
-<dialog class="create-room-dialog" bind:this={createDialog} aria-labelledby="create-room-title" onclose={() => (createOpen = false)}>
+<dialog class="create-room-dialog" bind:this={createDialog} aria-labelledby="create-room-title" oncancel={cancelCreateRoom} onclose={() => (createOpen = false)}>
 	<form class="create-room-form" onsubmit={submitCreateRoom}>
 		<header class="create-room-head">
 			<h2 id="create-room-title">Create a room</h2>
