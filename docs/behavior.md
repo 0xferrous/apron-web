@@ -14,7 +14,10 @@ rooms, a thread, people, Markdown examples, and a message moved into the thread,
 and implements the app's protocol
 requests (auth, room listings/history, messages, reactions, room changes,
 profile updates, activity, commands, and ping). Changes last only for the page
-lifetime; the preview does not advertise upload or streaming capabilities.
+lifetime, as do settings changed there (display name, sidebar, appearance),
+so previewing never replaces the real ones; the preview does not advertise
+upload or streaming capabilities. The in-memory server loads only with that
+route, never with the app itself.
 Local development and builds with an empty `VITE_DEFAULT_SERVER_URL` retain the
 same-origin default.
 After a failed WebSocket handshake, the client makes a bounded HTTP diagnostic

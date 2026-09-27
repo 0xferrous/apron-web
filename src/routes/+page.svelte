@@ -1,8 +1,7 @@
 <script lang="ts">
 	import { onMount, tick, untrack } from 'svelte';
 	import { passkeySupportError } from '$lib/protocol/webauthn';
-	import { previewWebSocketFactory } from '$lib/preview/memory-server';
-	import { ChatClient, childRooms, defaultWebSocketUrl, findMessage, normalizeWebSocketUrl, timelineMessages, type RoomSnapshot } from '$lib/protocol/client';
+	import { ChatClient, childRooms, defaultWebSocketUrl, findMessage, normalizeWebSocketUrl, timelineMessages, type RoomSnapshot, type WebSocketFactory } from '$lib/protocol/client';
 	import { serverOrigin } from '$lib/protocol/embeds';
 	import { compareLogIds } from '$lib/protocol/reducer';
 	import type { Embed, MessageRecord } from '$lib/protocol/types';
@@ -87,8 +86,12 @@
 	const selection = new MessageSelection();
 	const sidebar = new SidebarLayout();
 
+	/** `/__preview` passes its in-memory server's sockets; every other visit connects for real. */
+	let { webSocketFactory }: { webSocketFactory?: WebSocketFactory } = $props();
+	/** Against the in-memory server: no backend to pick, and nothing remembered. */
+	const previewMode = untrack(() => webSocketFactory !== undefined);
+
 	let client = $state<ChatClient | undefined>();
-	let previewMode = $state(false);
 	let serverInput = $state('');
 	let displayName = $state('');
 	/** The `user_id`s the composer's chips mention (§3.5), sent as `body.mentions`. */
@@ -367,7 +370,6 @@
 
 	onMount(() => {
 		passkeyUnavailable = passkeySupportError();
-		previewMode = window.location.pathname === '/__preview' || window.location.pathname.startsWith('/__preview/');
 		sidebar.load();
 		const memberListMedia = window.matchMedia('(min-width: 960px)');
 		memberListOpen = memberListMedia.matches;
@@ -389,7 +391,7 @@
 		const chat = new ChatClient(
 			normalizeWebSocketUrl(serverInput, window.location),
 			displayName,
-			previewMode ? previewWebSocketFactory : undefined
+			webSocketFactory
 		);
 		const unsubscribe = chat.subscribe((next) => {
 			session.apply(next, chat);

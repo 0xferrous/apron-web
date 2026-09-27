@@ -27,7 +27,16 @@ function read(key: string): string | null {
 	}
 }
 
+/** Off for `/__preview`, whose name, servers and layout shouldn't replace the real ones. */
+let persisting = true;
+
+/** Keeps every setting this page changes to the page: nothing is saved for the next visit. */
+export function keepSettingsInMemory(): void {
+	persisting = false;
+}
+
 function write(key: string, value: string): void {
+	if (!persisting) return;
 	try {
 		globalThis.localStorage?.setItem(key, value);
 	} catch {
