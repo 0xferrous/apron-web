@@ -37,7 +37,6 @@ describe('incoming message tracking', () => {
 		expect(tracker.observe([room([message(15), message(20), message(21)])], me).map((event) => event.message_id)).toEqual(['21']);
 	});
 });
-
 describe('notifications by room', () => {
 	const inRoom = (id: number, roomId: string): MessageRecord => ({ ...message(id), room_id: roomId });
 

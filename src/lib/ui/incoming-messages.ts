@@ -40,7 +40,6 @@ export class IncomingMessageTracker {
 		return incoming;
 	}
 }
-
 /**
  * One notification per room for a batch of arrivals, so a reconnect doesn't
  * raise one per missed message: the room's newest mention, else its newest message.
