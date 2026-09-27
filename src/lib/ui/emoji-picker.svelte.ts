@@ -62,12 +62,24 @@ export interface EmojiMart {
 }
 
 let loading: Promise<EmojiMart> | undefined;
+let dataLoading: Promise<EmojiMartData> | undefined;
 
 /**
  * emoji-mart and its bundled data, fetched from this app's own origin the
  * first time a picker opens: neither is in the main bundle. A failed load
  * is forgotten so the next open tries again.
  */
+export function loadEmojiData(): Promise<EmojiMartData> {
+	if (!dataLoading) {
+		const attempt = (import('@emoji-mart/data') as Promise<unknown> as Promise<{ default: EmojiMartData }>).then((json) => json.default);
+		dataLoading = attempt;
+		attempt.catch(() => {
+			if (dataLoading === attempt) dataLoading = undefined;
+		});
+	}
+	return dataLoading;
+}
+
 export function loadEmojiMart(): Promise<EmojiMart> {
 	if (!loading) {
 		// The data package is its JSON (sets/15/native.json); its typings only describe the shape.
