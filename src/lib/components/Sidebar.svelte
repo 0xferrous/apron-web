@@ -1,9 +1,11 @@
 <script lang="ts">
+	import Plus from '@lucide/svelte/icons/plus';
 	import { untrack } from 'svelte';
 	import type { ChatClient, RoomSnapshot } from '$lib/protocol/client';
 	import type { SessionView } from '$lib/ui/session.svelte';
 	import type { NotificationPermissionState, NotificationScope, NotificationTestResult } from '$lib/ui/notifications';
 	import { sidebarRooms, type ThreadEntry } from '$lib/ui/timeline';
+	import CreateRoomDialog from './CreateRoomDialog.svelte';
 	import ProfileBar from './ProfileBar.svelte';
 
 	interface Props {
@@ -31,11 +33,13 @@
 		onthread: (thread: string) => void;
 		/** Join a visible room or thread from `room_list` (cap `rooms`); it opens once its `room_update` arrives. */
 		onjoin: (roomId: string) => void;
+		/** A room created here; it opens once its `room_update` arrives. */
+		oncreateroom: (roomId: string) => void;
 		onsignout: () => void;
 		/** Opens the connect screen to sign in with a passkey, carrying a handle typed in the profile. */
 		onsignin: (name?: string) => void;
 	}
-	let { client, session, backendLabel, threads, activeThread, mentions, unread, displayName = $bindable(), passkeyUnavailable, notificationsEnabled, notificationsSupported, notificationPermission, notificationScope, onnotifications, onnotificationscope, ontestnotifications, onconnect, onroom, onthread, onjoin, onsignout, onsignin }: Props = $props();
+	let { client, session, backendLabel, threads, activeThread, mentions, unread, displayName = $bindable(), passkeyUnavailable, notificationsEnabled, notificationsSupported, notificationPermission, notificationScope, onnotifications, onnotificationscope, ontestnotifications, onconnect, onroom, onthread, onjoin, oncreateroom, onsignout, onsignin }: Props = $props();
 	/** Threads are listed under their parent, not as rooms of their own. */
 	let rooms = $derived(sidebarRooms(session.rooms));
 	let canBrowse = $derived(session.canManageRooms && session.ready);
@@ -44,6 +48,8 @@
 	let browseOpen = $state(false);
 	let moreThreadsFor = $state<string | undefined>();
 	let listError = $state('');
+	let createOpen = $state(false);
+	let canCreateRoom = $derived(session.canManageRooms && session.ready && !session.readOnly);
 	/** Visible rooms this user hasn't joined (or has left), from the latest `room_list`. */
 	let unjoined = $derived((session.snapshot.directory ?? []).filter((listing) => !listing.joined));
 	/** Threads of the active room this user hasn't joined, once `room_list` has listed them. */
@@ -80,6 +86,7 @@
 		moreThreadsFor = moreThreadsFor === parentRoomId ? undefined : parentRoomId;
 		if (moreThreadsFor) list(parentRoomId);
 	}
+
 </script>
 
 <aside class="ap-shell-side" aria-label="Rooms">
@@ -91,6 +98,9 @@
 		<section class="ap-sect">
 			<div class="ap-sect-head">
 				<span class="ap-sect-toggle" role="heading" aria-level="2">Rooms</span>
+				{#if canCreateRoom}
+					<button class="ap-btn ap-btn-ghost ap-btn-sm create-room-trigger" type="button" aria-label="Create room" title="Create room" onclick={() => (createOpen = true)}><Plus size={18} aria-hidden="true" /></button>
+				{/if}
 			</div>
 			<div class="ap-sect-body" data-testid="room-list">
 				{#if rooms.length === 0}
@@ -172,9 +182,12 @@
 	<ProfileBar {client} {session} {backendLabel} bind:displayName {passkeyUnavailable} {notificationsEnabled} {notificationsSupported} {notificationPermission} {notificationScope} {onnotifications} {onnotificationscope} {ontestnotifications} {onsignout} {onsignin} />
 </aside>
 
+<CreateRoomDialog {client} bind:open={createOpen} enabled={canCreateRoom} oncreated={oncreateroom} />
+
 <style>
 	.ap-shell-side { overflow: hidden; }
 	.ap-shell-sidehead { gap: var(--space-2); }
+	.create-room-trigger { width: 28px; padding: 0; justify-content: center; }
 	.backend { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 	.muted { margin: 0; padding: var(--space-1) var(--space-3); color: var(--ink-muted); font-size: 13px; line-height: 18px; }
 	.threads { display: flex; flex-direction: column; gap: 2px; }

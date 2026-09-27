@@ -1,4 +1,5 @@
 <script lang="ts">
+	import FileIcon from '@lucide/svelte/icons/file';
 	import type { UploadState } from '$lib/protocol/client';
 	import { safeLink, sameOriginMedia } from '$lib/protocol/embeds';
 	import type { Embed } from '$lib/protocol/types';
@@ -26,7 +27,7 @@
 
 {#snippet glyph()}
 	<span class="ap-embed-fileglyph">
-		<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5" /></svg>
+		<FileIcon size={20} aria-hidden="true" />
 	</span>
 {/snippet}
 

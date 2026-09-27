@@ -359,7 +359,7 @@ a.ap-embed-card:hover { background: var(--bg-300); }
 .ap-mention-me { background: var(--accent); color: var(--on-accent); }
 .ap-msg-mention .ap-mention-me { box-shadow: 0 0 0 1px var(--bg-100); }
 
-/* MentionPicker — above the composer while typing @… */
+/* Shared autocomplete picker — above the composer while typing @…, #… or :… */
 .ap-mpick { position: absolute; left: var(--space-4); bottom: calc(100% + var(--space-1)); z-index: 5; width: min(320px, calc(100% - 2 * var(--space-4))); max-height: 240px; overflow: auto; margin: 0; padding: var(--space-1); list-style: none; background: var(--bg-200); border: 1px solid var(--line); border-radius: var(--radius-md); box-shadow: var(--shadow-popover); }
 .ap-mpick-item { display: flex; align-items: center; gap: var(--space-2); padding: 5px var(--space-2); border-radius: var(--radius-sm); font-size: 14px; line-height: 20px; cursor: pointer; }
 .ap-mpick-active { background: var(--bg-300); }
@@ -368,6 +368,7 @@ a.ap-embed-card:hover { background: var(--bg-300); }
 .ap-mpick-hit { background: transparent; color: var(--accent); }
 .ap-mpick-kbd { margin-left: auto; font: inherit; font-size: 11px; line-height: 16px; padding: 0 5px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); color: var(--ink-muted); }
 .ap-mpick-empty { padding: var(--space-2) var(--space-3); font-size: 13px; color: var(--ink-muted); }
+.ap-mpick-emoji-glyph { width: 24px; text-align: center; font-size: 20px; line-height: 24px; }
 
 /* Mention counts: an @ badge in accent beside the room, and in the jump bar */
 .ap-count-at { font-weight: 700; }
@@ -465,6 +466,7 @@ a.ap-embed-ogcard:hover { background: var(--bg-300); }
 /* Room mentions and unknown mentions */
 .ap-mention-room { font: inherit; border: 0; cursor: pointer; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; }
 .ap-mention-room::before { content: "\21B3 "; font-weight: 400; }
+.ap-mention-hash-room::before { content: none; }
 .ap-mention-unknown { color: var(--ink-muted); }
 .ap-status-retry { color: var(--ink-muted); font-variant-numeric: tabular-nums; }
 .ap-profedit-avbtns { display: inline-flex; align-items: center; gap: var(--space-3); }

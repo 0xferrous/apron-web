@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { collapseMentions, draftMentions, draftText, insertMention, insertText, mentionQuery } from './draft';
+import { collapseMentions, draftMentions, draftText, insertMention, insertText, mentionQuery, unchip, type DraftChip, type DraftPart } from './draft';
 
 const people = [
 	{ id: 'ada_1', name: 'Ada' },
@@ -121,5 +121,55 @@ describe('inserting at the caret', () => {
 
 	it('leaves a leading slash in place, so a command stays a command', () => {
 		expect(draftText(insertText(['/shrug '], 7, 7, '🤷').parts)).toBe('/shrug 🤷');
+	});
+});
+
+describe('composer room chips', () => {
+	const rooms = ['general', '1790473611343', 'ops', 'ops-east'];
+	const typedRoom = (text: string, caret = text.length, final = false) => collapseMentions([text], people, { caret, final, rooms });
+	const thread = { id: '1790473611343', room: true } as const;
+
+	it('chips a picked room or thread, sends #room_id, and mentions no one', () => {
+		const inserted = insertMention(['see #17'], 4, 7, thread.id, true);
+		expect(inserted).toEqual({ parts: ['see ', thread, ' '], caret: 19 });
+		expect(draftText(inserted.parts)).toBe('see #1790473611343 ');
+		expect(draftMentions(['hi ', { id: 'bob' }, ' in ', thread])).toEqual(['bob']);
+	});
+
+	it('chips a finished #room_id naming a known room, like a finished @user_id', () => {
+		expect(typedRoom('see #1790473611343 now').parts).toEqual(['see ', thread, ' now']);
+		expect(typedRoom('see #general.', 13).parts).toEqual(['see ', { id: 'general', room: true }, '.']);
+		// Unknown, mid-word, headings and code stay text.
+		expect(typedRoom('see #nope now').parts).toEqual(['see #nope now']);
+		expect(typedRoom('a#general now').parts).toEqual(['a#general now']);
+		expect(typedRoom('# general').parts).toEqual(['# general']);
+		expect(typedRoom('`#general` now').parts).toEqual(['`#general` now']);
+		// Straight after a chip, `@bob#general` reads as text to everyone else.
+		expect(collapseMentions([{ id: 'bob' }, '#general now'], people, { caret: 16, rooms }).parts).toEqual([{ id: 'bob' }, '#general now']);
+		expect(collapseMentions([{ id: 'bob' }, '@ada_1 now'], people, { caret: 14 }).parts).toEqual([{ id: 'bob' }, '@ada_1 now']);
+	});
+
+	it('waits while the #room_id is still being typed', () => {
+		expect(typedRoom('see #general').parts).toEqual(['see #general']);
+		expect(typedRoom('see #ops-').parts).toEqual(['see #ops-']);
+		expect(typedRoom('see #general', 12, true).parts).toEqual(['see ', { id: 'general', room: true }]);
+	});
+});
+
+describe('backspace against a chip', () => {
+	const label = (chip: DraftChip) => (chip.room ? '#Deploy checklist' : '@Ada Lovelace');
+
+	it('turns the chip just before the caret back into the text it showed', () => {
+		const parts: DraftPart[] = ['hi ', { id: 'lovelace' }, ' and ', { id: '1790473611343', room: true }];
+		// `@lovelace` ends at 12, `#1790473611343` at 31.
+		expect(unchip(parts, 12, label)).toEqual({ parts: ['hi @Ada Lovelace and ', { id: '1790473611343', room: true }], caret: 16 });
+		expect(unchip(parts, 31, label)).toEqual({ parts: ['hi ', { id: 'lovelace' }, ' and #Deploy checklist'], caret: 34 });
+	});
+
+	it('leaves the draft alone when no chip ends at the caret', () => {
+		const parts = ['hi ', { id: 'bob' }, ' there'];
+		expect(unchip(parts, 3, label)).toBeUndefined();
+		expect(unchip(parts, 8, label)).toBeUndefined();
+		expect(unchip([], 0, label)).toBeUndefined();
 	});
 });

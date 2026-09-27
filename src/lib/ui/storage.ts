@@ -10,6 +10,7 @@ const KEY = {
 	sidebar: 'apron.sidebar',
 	notificationsEnabled: 'apron.desktopNotifications',
 	notificationScope: 'apron.notificationScope',
+	memberList: 'apron.memberList',
 	/** app.html reads this one too, to apply the theme before the app loads. */
 	appearance: 'apron.appearance'
 } as const;
@@ -27,7 +28,16 @@ function read(key: string): string | null {
 	}
 }
 
+/** Off for `/__preview`, whose name, servers and layout shouldn't replace the real ones. */
+let persisting = true;
+
+/** Keeps every setting this page changes to the page: nothing is saved for the next visit. */
+export function keepSettingsInMemory(): void {
+	persisting = false;
+}
+
 function write(key: string, value: string): void {
+	if (!persisting) return;
 	try {
 		globalThis.localStorage?.setItem(key, value);
 	} catch {
@@ -73,9 +83,9 @@ export function rememberServer(recent: RecentServer[], url: string, label: strin
 	return next;
 }
 
-export function loadSidebarPrefs(): Partial<SidebarPrefs> {
+function loadPanelPrefs(key: string): Partial<SidebarPrefs> {
 	try {
-		const parsed: unknown = JSON.parse(read(KEY.sidebar) ?? '{}');
+		const parsed: unknown = JSON.parse(read(key) ?? '{}');
 		if (!isJsonObject(parsed)) return {};
 		return {
 			...(typeof parsed.width === 'number' && Number.isFinite(parsed.width) && parsed.width > 0 ? { width: parsed.width } : {}),
@@ -86,8 +96,21 @@ export function loadSidebarPrefs(): Partial<SidebarPrefs> {
 	}
 }
 
+export function loadSidebarPrefs(): Partial<SidebarPrefs> {
+	return loadPanelPrefs(KEY.sidebar);
+}
+
 export function saveSidebarPrefs(prefs: SidebarPrefs): void {
 	write(KEY.sidebar, JSON.stringify(prefs));
+}
+
+/** The member list's width and whether it's collapsed on wide screens; narrow ones overlay it instead. */
+export function loadMemberListPrefs(): Partial<SidebarPrefs> {
+	return loadPanelPrefs(KEY.memberList);
+}
+
+export function saveMemberListPrefs(prefs: SidebarPrefs): void {
+	write(KEY.memberList, JSON.stringify(prefs));
 }
 
 export function loadNotificationsEnabled(): boolean {

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { renderMarkdown, renderPlain, type MentionResolver } from './markdown';
+import { renderMarkdown, renderPlain, type MentionResolver, mentionSegments } from './markdown';
 
 const resolve: MentionResolver = (id) => {
 	if (id === 'alice') return { kind: 'user', id, name: 'Alice Chen' };
@@ -21,6 +21,37 @@ describe('mentions (Appendix A.3)', () => {
 
 	it('links a room mention and escapes its title', () => {
 		expect(renderMarkdown('see @ops', resolve)).toContain('<button type="button" class="ap-mention ap-mention-room" data-room-id="ops" title="Open Ops &amp; Co">Ops &amp; Co</button>');
+	});
+
+	it('links #room IDs with a hash label, but leaves unknown or embedded hashtags alone', () => {
+		expect(renderMarkdown('see #ops.', resolve)).toContain('<button type="button" class="ap-mention ap-mention-room ap-mention-hash-room" data-room-id="ops" title="Open Ops &amp; Co">#Ops &amp; Co</button>.');
+		expect(renderPlain('#nobody tag#ops', resolve)).toBe('#nobody tag#ops');
+		expect(renderMarkdown('`#ops`', resolve)).toBe('<p><code>#ops</code></p>\n');	});
+
+	it('links a thread by its all-digit ID, leaving numbers that name no room as text', () => {
+		const threads = (id: string) => (id === '1790473611343' ? { kind: 'room' as const, id, title: 'Deploy checklist' } : undefined);
+		expect(renderPlain('see #1790473611343, not #1.', undefined, threads)).toBe(
+			'see <button type="button" class="ap-mention ap-mention-room ap-mention-hash-room" data-room-id="1790473611343" title="Open Deploy checklist">#Deploy checklist</button>, not #1.'
+		);
+	});
+
+	it('resolves #room_id as a room even when @id resolves to a user', () => {
+		const userResolver: MentionResolver = (id) => id === 'ops' ? { kind: 'user', id, name: 'Ops User' } : undefined;
+		const roomResolver = (id: string) => id === 'ops' ? { kind: 'room' as const, id, title: 'Ops Room' } : undefined;
+		const html = renderMarkdown('#ops @ops', userResolver, roomResolver);
+		expect(html).toContain('data-room-id="ops" title="Open Ops Room">#Ops Room</button>');
+		expect(html).toContain('data-user-id="ops" title="@ops">@Ops User</span>');
+	});
+
+	it('splits text around known mentions, for reply snippets', () => {
+		const roomResolver = (id: string) => (id === 'ops' ? { kind: 'room' as const, id, title: 'Ops Room' } : undefined);
+		expect(mentionSegments('ask @ops in #ops, not #nope.', resolve, roomResolver)).toEqual([
+			'ask ',
+			{ target: { kind: 'room', id: 'ops', title: 'Ops & Co' }, hash: false },
+			' in ',
+			{ target: { kind: 'room', id: 'ops', title: 'Ops Room' }, hash: true },
+			', not #nope.'
+		]);
 	});
 
 	it('takes a second @ for system identities and drops trailing dots and dashes', () => {

@@ -9,6 +9,7 @@
 	import type { ReactionChip } from '$lib/ui/reactions';
 	import { eventTime, idDateTime, idIso, idTimeCompact } from '$lib/ui/time';
 	import Avatar from './Avatar.svelte';
+	import MentionText from './MentionText.svelte';
 	import ReactionBar from './ReactionBar.svelte';
 	import SystemNotice, { noticeScope } from './SystemNotice.svelte';
 	import Embed from './embeds/Embed.svelte';
@@ -98,7 +99,7 @@
 	let text = $derived(textOf(event));
 	let embeds = $derived(embedsOf(event));
 	let system = $derived(isSystem(event));
-	let body = $derived(event.body?.format === 'markdown' ? renderMarkdown(text, directory.resolve) : renderPlain(text, directory.resolve));
+	let body = $derived(event.body?.format === 'markdown' ? renderMarkdown(text, directory.resolve, directory.resolveRoom) : renderPlain(text, directory.resolve, directory.resolveRoom));
 	let selectable = $derived(selecting && caps.select);
 	let picked = $derived(selectable && selected);
 	let replyId = $derived(event.reply_to?.message_id);
@@ -248,7 +249,7 @@
 						<Avatar name={targetName} id={directory.person(replyTarget.from)?.user_id} src={directory.avatar(replyTarget.from)} size="sm" />
 						{targetName}
 					</span>
-					<span class="ap-reply-text">{#if replyTarget.deleted}<em>Message deleted</em>{:else}{replySnippet(replyTarget)}{/if}</span>
+					<span class="ap-reply-text">{#if replyTarget.deleted}<em>Message deleted</em>{:else}<MentionText text={replySnippet(replyTarget)} />{/if}</span>
 				</button>
 			{:else}
 				<div class="ap-reply reply-static" data-testid="reply-reference">

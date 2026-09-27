@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Settings from '@lucide/svelte/icons/settings';
 	import { isJsonObject } from '$lib/protocol/types';
 	import type { ChatClient, OperationHandle } from '$lib/protocol/client';
 	import { passkeyMessage } from '$lib/ui/connection';
@@ -281,7 +282,7 @@
 		<span class="ap-profile-edit" aria-hidden="true">Edit</span>
 	</button>
 	<button class="ap-profile-settings" bind:this={preferencesTrigger} type="button" aria-label="Open preferences" aria-haspopup="dialog" title="Preferences" onclick={showPreferences}>
-		<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"/><path d="m19.4 15 .1.1-1.6 2.7-.2-.1a1.7 1.7 0 0 0-1.8.1 1.7 1.7 0 0 0-.9 1.5v.2h-3.2v-.2a1.7 1.7 0 0 0-2.7-1.4l-.2.1-1.6-2.7.1-.1a1.7 1.7 0 0 0 0-3l-.1-.1 1.6-2.7.2.1a1.7 1.7 0 0 0 2.7-1.4v-.2h3.2v.2a1.7 1.7 0 0 0 2.7 1.4l.2-.1 1.6 2.7-.1.1a1.7 1.7 0 0 0 0 3Z"/></svg>
+		<Settings size={18} strokeWidth={1.6} aria-hidden="true" />
 	</button>
 </div>
 
@@ -291,7 +292,6 @@
 	.ap-profile-settings { flex: none; width: 32px; height: 32px; display: grid; place-items: center; padding: 0; color: var(--ink-muted); background: transparent; border: 0; border-radius: var(--radius-md); cursor: pointer; }
 	.ap-profile-settings:hover { color: var(--ink); background: var(--bg-300); }
 	.ap-profile-settings:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-	.ap-profile-settings svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 	.ap-profile-pop { max-height: calc(100dvh - 96px); overflow-y: auto; }
 	.ap-profile-pop .ap-profedit-actions { flex-wrap: wrap; }
 	.signin-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }

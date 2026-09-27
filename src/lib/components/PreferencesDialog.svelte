@@ -1,4 +1,5 @@
 <script lang="ts">
+	import X from '@lucide/svelte/icons/x';
 	import { appearanceSettings, sanitizeFontFamily, type FontBrowserState, type ThemeMode } from '$lib/ui/appearance.svelte';
 	import type { NotificationPermissionState, NotificationScope, NotificationTestResult } from '$lib/ui/notifications';
 	import FontFamilyField from './FontFamilyField.svelte';
@@ -120,7 +121,7 @@
 <dialog class="ap-preferences" bind:this={preferencesDialog} aria-labelledby="ap-pref-title" onclose={preferencesClosed}>
 	<header class="ap-preferences-head">
 		<div><p>SETTINGS</p><h2 id="ap-pref-title">Preferences</h2></div>
-		<button class="ap-btn ap-btn-ghost ap-btn-sm" type="button" aria-label="Close preferences" onclick={closePreferences}>×</button>
+		<button class="ap-btn ap-btn-ghost ap-btn-sm" type="button" aria-label="Close preferences" onclick={closePreferences}><X size={16} aria-hidden="true" /></button>
 	</header>
 	<div class="ap-preferences-body">
 		<nav class="ap-preferences-nav" aria-label="Preference sections">

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Users from '@lucide/svelte/icons/users';
 	import type { RoomSnapshot } from '$lib/protocol/client';
 
 	interface Props {
@@ -22,16 +23,26 @@
 		canLeave: boolean;
 		/** Offer Join for a thread open without joining it (cap `rooms`). */
 		canJoin?: boolean;
+		/** Whether the room member list is visible. */
+		memberListOpen: boolean;
 		onback: () => void;
 		onroom: () => void;
 		onedit: () => void;
 		onleave: () => void;
 		onjoin?: () => void;
+		onmemberlist: () => void;
 	}
 	let {
 		room, pane, threadTitle, typing, replyCount, moreReplies = false, canEditThread, editorOpen, editDisabled, canLeave, canJoin = false,
-		onback, onroom, onedit, onleave, onjoin
+		memberListOpen, onback, onroom, onedit, onleave, onjoin, onmemberlist
 	}: Props = $props();
+
+	let memberListToggle = $state<HTMLButtonElement | undefined>();
+
+	/** Where focus goes when the member list collapses from under it. */
+	export function focusMemberListToggle(): void {
+		memberListToggle?.focus();
+	}
 </script>
 
 <header class="ap-roomhead">
@@ -70,12 +81,17 @@
 			{/if}
 		</div>
 	{/if}
+	<button bind:this={memberListToggle} class="ap-iconbtn member-list-toggle" class:member-list-toggle-open={memberListOpen} type="button" aria-label={memberListOpen ? 'Hide member list' : 'Show member list'} aria-expanded={memberListOpen} title={memberListOpen ? 'Hide member list' : 'Show member list'} onclick={onmemberlist}>
+		<Users size={18} strokeWidth={1.8} aria-hidden="true" />
+	</button>
 </header>
 
 <style>
 	.ap-roomhead-back { display: none; }
 	.ap-roomhead-name { max-width: 100%; }
 	.ap-roomhead-actions { flex: none; }
+	.member-list-toggle { flex: none; }
+	.member-list-toggle-open { color: var(--ink); background: var(--bg-300); }
 	/* Typing shows in the header's subtitle only on phones; wide layouts have the row above the composer. */
 	.typing-head { display: none; }
 	@media (max-width: 719px) {

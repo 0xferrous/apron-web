@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount, tick, untrack } from 'svelte';
 	import { passkeySupportError } from '$lib/protocol/webauthn';
-	import { ChatClient, childRooms, defaultWebSocketUrl, findMessage, normalizeWebSocketUrl, timelineMessages, type RoomSnapshot } from '$lib/protocol/client';
+	import { ChatClient, childRooms, defaultWebSocketUrl, findMessage, normalizeWebSocketUrl, timelineMessages, type RoomSnapshot, type WebSocketFactory } from '$lib/protocol/client';
 	import { serverOrigin } from '$lib/protocol/embeds';
 	import { compareLogIds } from '$lib/protocol/reducer';
 	import type { Embed, MessageRecord } from '$lib/protocol/types';
@@ -14,6 +14,7 @@
 	import SelectionBar from '$lib/components/SelectionBar.svelte';
 	import Sidebar from '$lib/components/Sidebar.svelte';
 	import SidebarHandle from '$lib/components/SidebarHandle.svelte';
+	import MemberListSidebar from '$lib/components/MemberListSidebar.svelte';
 	import StatusBanner from '$lib/components/StatusBanner.svelte';
 	import ThreadCard from '$lib/components/ThreadCard.svelte';
 	import ThreadEditor from '$lib/components/ThreadEditor.svelte';
@@ -32,7 +33,7 @@
 	import { MessageSelection } from '$lib/ui/selection.svelte';
 	import { SessionView } from '$lib/ui/session.svelte';
 	import { SidebarLayout } from '$lib/ui/sidebar.svelte';
-	import { loadDisplayName, loadNotificationScope, loadNotificationsEnabled, loadRecentServers, loadServerUrl, rememberServer, saveDisplayName, saveNotificationScope, saveNotificationsEnabled, type RecentServer } from '$lib/ui/storage';
+	import { loadDisplayName, loadMemberListPrefs, loadNotificationScope, loadNotificationsEnabled, loadRecentServers, loadServerUrl, loadSidebarPrefs, rememberServer, saveDisplayName, saveMemberListPrefs, saveNotificationScope, saveNotificationsEnabled, saveSidebarPrefs, type RecentServer } from '$lib/ui/storage';
 	import { buildRoomTimeline, buildThreadTimeline, threadEntries, threadTitleFor } from '$lib/ui/timeline';
 	import { idDateTime, idIso, idTime } from '$lib/ui/time';
 	import { tabTitle } from '$lib/ui/attention';
@@ -83,7 +84,14 @@
 	/** Tells this tab's notifications apart from other tabs' when the service worker relays a click. */
 	const tabId = Math.random().toString(36).slice(2);
 	const selection = new MessageSelection();
-	const sidebar = new SidebarLayout();
+	const sidebar = new SidebarLayout({ side: 'left', defaultWidth: 248, minWidth: 160, maxWidth: 480, load: loadSidebarPrefs, save: saveSidebarPrefs });
+	/** The member list's width and, on wide screens, whether it's collapsed. */
+	const memberList = new SidebarLayout({ side: 'right', defaultWidth: 240, minWidth: 180, maxWidth: 420, load: loadMemberListPrefs, save: saveMemberListPrefs });
+
+	/** `/__preview` passes its in-memory server's sockets; every other visit connects for real. */
+	let { webSocketFactory }: { webSocketFactory?: WebSocketFactory } = $props();
+	/** Against the in-memory server: no backend to pick, and nothing remembered. */
+	const previewMode = untrack(() => webSocketFactory !== undefined);
 
 	let client = $state<ChatClient | undefined>();
 	let serverInput = $state('');
@@ -104,7 +112,7 @@
 	let activeThread = $state<string | undefined>();
 	let selectedRoomId = $state<string | undefined>();
 	let pendingOpen = $state<PendingOpen | undefined>();
-	/** A room or thread joined from the directory, opened once its `room_update` has arrived. */
+	/** A room or thread joined from the directory or just created, opened once its `room_update` has arrived. */
 	let pendingJoin = $state<string | undefined>();
 	/**
 	 * Where the New divider sits in the open pane: after your read cursor as it
@@ -114,7 +122,17 @@
 	/** Messages a thread is being started from, for the button's "Starting…". */
 	let startingThreads = $state<Record<string, true>>({});
 	let mobilePane = $state<'rooms' | 'main'>('main');
+	/** Wide screens give the member list a column of its own; narrower ones overlay it on the conversation. */
+	let memberListWide = $state(false);
+	/** The narrow overlay, closed until asked for. */
+	let memberListOverlay = $state(false);
+	/**
+	 * The column is shown as last left (collapsed or not, and its width),
+	 * remembered for the next visit; the overlay isn't.
+	 */
+	let memberListOpen = $derived(memberListWide ? !memberList.collapsed : memberListOverlay);
 	let composer = $state<Composer | undefined>();
+	let roomHeader = $state<RoomHeader | undefined>();
 	let messageScroll = $state<HTMLDivElement | undefined>();
 	let stickToBottom = $state(true);
 	let latestVisible = $state(true);
@@ -148,6 +166,13 @@
 	/** Writing here: posting, replying, reacting, and editing threads. A guest who only reads can't. */
 	let canCompose = $derived(paneReady && !session.readOnly);
 	let people = $derived(peopleIn([...(activeThread ? timelineMessages(activeRoom) : []), ...(intro ? [intro] : []), ...messages], session.you, paneRoom?.members));
+	let roomSuggestions = $derived.by(() => {
+		const rooms = new Map<string, { id: string; title: string }>();
+		for (const room of [...(snapshot.directory ?? []), ...Object.values(snapshot.threadDirectory).flat(), ...session.rooms]) {
+			rooms.set(room.id, { id: room.id, title: room.title });
+		}
+		return [...rooms.values()];
+	});
 	let typingNames = $derived(snapshot.typing
 		.filter((entry) => entry.room === paneRoom?.id && entry.from.user_id !== session.you?.user_id)
 		.map((entry) => directory.name(entry.from)));
@@ -230,7 +255,7 @@
 		untrack(() => listMembers(MEMBERS_RETRY_MS));
 	});
 
-	// A room joined from the directory opens once its `room_update` has arrived.
+	// A room joined from the directory, or created from the sidebar, opens once its `room_update` has arrived.
 	$effect(() => {
 		const joined = pendingJoin;
 		const room = joined ? session.rooms.find((candidate) => candidate.id === joined) : undefined;
@@ -357,9 +382,17 @@
 	onMount(() => {
 		passkeyUnavailable = passkeySupportError();
 		sidebar.load();
-		serverInput = loadServerUrl() ?? defaultWebSocketUrl(window.location);
-		displayName = loadDisplayName();
-		recentServers = loadRecentServers();
+		memberList.load();
+		const memberListMedia = window.matchMedia('(min-width: 960px)');
+		const memberListMediaChange = ({ matches }: { matches: boolean }) => {
+			memberListWide = matches;
+			memberListOverlay = false;
+		};
+		memberListMediaChange(memberListMedia);
+		memberListMedia.addEventListener('change', memberListMediaChange);
+		serverInput = previewMode ? 'ws://apron-preview.invalid' : loadServerUrl() ?? defaultWebSocketUrl(window.location);
+		displayName = previewMode ? 'Preview User' : loadDisplayName();
+		recentServers = previewMode ? [] : loadRecentServers();
 		notificationsEnabled = loadNotificationsEnabled();
 		notificationScope = loadNotificationScope();
 		notificationState = notificationPermission();
@@ -370,7 +403,11 @@
 			permission = status;
 			status.onchange = refreshNotificationPermission;
 		}).catch(() => undefined);
-		const chat = new ChatClient(normalizeWebSocketUrl(serverInput, window.location), displayName);
+		const chat = new ChatClient(
+			normalizeWebSocketUrl(serverInput, window.location),
+			displayName,
+			webSocketFactory
+		);
 		const unsubscribe = chat.subscribe((next) => {
 			session.apply(next, chat);
 			directory.apply(next, serverOrigin(chat.url));
@@ -378,6 +415,7 @@
 		chat.start();
 		client = chat;
 		return () => {
+			memberListMedia.removeEventListener('change', memberListMediaChange);
 			if (typingTimer) clearTimeout(typingTimer);
 			if (highlightTimer) clearTimeout(highlightTimer);
 			reveal.stop();
@@ -397,6 +435,7 @@
 
 	/** The profile's "Sign in with a passkey" opens here too, carrying the handle typed there. */
 	function openConnect(options: { passkey?: boolean; name?: string } = {}): void {
+		if (previewMode) return;
 		connectScheme = options.passkey ? 'webauthn' : undefined;
 		if (options.name) displayName = options.name;
 		connectOpen = true;
@@ -415,6 +454,7 @@
 		selectedRoomId = undefined;
 		activeThread = undefined;
 		pendingOpen = undefined;
+		pendingJoin = undefined;
 		startingThreads = {};
 		threadEditorOpen = false;
 		selection.cancel();
@@ -491,6 +531,7 @@
 	}
 
 	function connected(): void {
+		if (previewMode) return;
 		if (client) recentServers = rememberServer(recentServers, client.url, session.server?.name || backendHost(client.url) || undefined);
 		connectOpen = false;
 	}
@@ -714,6 +755,11 @@
 		composer?.focus();
 	}
 
+	function toggleMemberList(): void {
+		if (memberListWide) memberList.toggle();
+		else memberListOverlay = !memberListOverlay;
+	}
+
 	// --- Rooms ---
 
 	function joinRoom(roomId: string): void {
@@ -798,11 +844,11 @@
 		return findMessage(session.rooms, id) ?? client?.message(id);
 	}
 
-	function replyPreview(id: string): string {
+	function replyPreview(id: string): { name?: string; text: string } {
 		const target = resolveMessage(id);
-		if (!target) return 'Message unavailable';
-		if (target.deleted) return 'Message deleted';
-		return `${senderName(target)}: ${replySnippet(target)}`;
+		if (!target) return { text: 'Message unavailable' };
+		if (target.deleted) return { text: 'Message deleted' };
+		return { name: senderName(target), text: replySnippet(target) };
 	}
 
 	/** A message's reaction chips, from the timeline of the room it lives in (an intro may live in the parent). */
@@ -1072,21 +1118,24 @@
 <div
 	class="app ap-shell ap-shell-norail"
 	class:side-collapsed={sidebar.collapsed}
-	class:side-resizing={sidebar.resizing}
+	class:side-resizing={sidebar.resizing || memberList.resizing}
+	class:member-list-open={memberListOpen}
 	data-pane={mobilePane}
 	style:--sidebar-w="{sidebar.collapsed ? 0 : sidebar.width}px"
+	style:--member-list-w="{memberList.width}px"
 >
 	<Sidebar
 		{client} {session} {backendLabel} threads={listedThreads} {activeThread} mentions={mentions.byRoom} unread={unread.byRoom} bind:displayName {passkeyUnavailable}
 		notificationsEnabled={notificationsActive} notificationsSupported={notificationState !== 'unsupported'} notificationPermission={notificationState} notificationScope={notificationScope} onnotifications={toggleNotifications} onnotificationscope={updateNotificationScope} ontestnotifications={testNotifications}
 		onconnect={() => openConnect()} onsignin={(name) => openConnect({ passkey: true, name })}
-		onroom={chooseRoom} onthread={chooseThread} onjoin={joinRoom} onsignout={() => session.forget()}
+		onroom={chooseRoom} onthread={chooseThread} onjoin={joinRoom} oncreateroom={(roomId) => (pendingJoin = roomId)} onsignout={() => session.forget()}
 	/>
 	<SidebarHandle layout={sidebar} />
 
 	<main class="ap-shell-main" aria-label="Conversation">
 		{#if activeRoom}
 			<RoomHeader
+				bind:this={roomHeader}
 				room={activeRoom}
 				pane={paneRoom ?? activeRoom}
 				threadTitle={activeThread ? threadTitle(activeThread) : undefined}
@@ -1098,7 +1147,8 @@
 				editDisabled={!paneReady}
 				canLeave={session.canLeaveRooms && !session.readOnly && Boolean(paneRoom?.joined)}
 				canJoin={session.canManageRooms && !session.readOnly && Boolean(paneRoom) && !paneRoom?.joined}
-				onback={() => (mobilePane = 'rooms')} onroom={backToRoom} onedit={() => (threadEditorOpen = !threadEditorOpen)} onleave={leavePane} onjoin={joinPane}
+				{memberListOpen}
+				onback={() => (mobilePane = 'rooms')} onroom={backToRoom} onedit={() => (threadEditorOpen = !threadEditorOpen)} onleave={leavePane} onjoin={joinPane} onmemberlist={toggleMemberList}
 			/>
 			{#if threadEditorOpen && activeThreadEntry}
 				{#key activeThreadEntry.id}
@@ -1235,7 +1285,8 @@
 					canUpload={snapshot.capabilities['embed:upload']}
 					canCommand={snapshot.capabilities.command}
 					{people}
-					replyPreview={drafts.reply ? replyPreview(drafts.reply) : undefined}
+					rooms={roomSuggestions}
+					reply={drafts.reply ? replyPreview(drafts.reply) : undefined}
 					oninput={composerInput} onsend={sendMessage} onfiles={sendFiles} oncancelreply={cancelReply}
 					onmention={() => listMembers(MEMBERS_FRESH_MS)}
 				/>
@@ -1253,6 +1304,9 @@
 			</div>
 		{/if}
 	</main>
+	<MemberListSidebar {session} room={paneRoom} open={memberListOpen} />
+	<!-- Kept through a drag that collapses the list, so the drag still ends on it. -->
+	{#if memberListWide && (memberListOpen || memberList.resizing)}<SidebarHandle layout={memberList} name="member list" oncollapse={() => roomHeader?.focusMemberListToggle()} />{/if}
 
 	{#if feedback.current}
 		<div class="toast">
@@ -1294,11 +1348,15 @@
 	.toast :global(.ap-status) { box-shadow: var(--shadow-float); }
 	.toast-right { left: auto; right: var(--space-4); transform: none; }
 
+	/* Wide screens give an open member list its own column; narrower ones overlay it. */
+	@media (min-width: 960px) {
+		.app.member-list-open { grid-template-columns: var(--sidebar-w) minmax(0, 1fr) var(--member-list-w); }
+	}
 	/* Under 720px it's one pane at a time: rooms, then the room or thread, pushed like pages. */
 	@media (max-width: 719px) {
 		.app { grid-template-columns: minmax(0, 1fr); }
 		.app[data-pane='main'] :global(.ap-shell-side) { display: none; }
-		.app[data-pane='rooms'] .ap-shell-main { display: none; }
+		.app[data-pane='rooms'] .ap-shell-main, .app[data-pane='rooms'] :global(.member-list) { display: none; }
 		.side-collapsed :global(.ap-shell-side) { visibility: visible; }
 		.typing-row { display: none; }
 		.toast-right { right: var(--space-4); left: var(--space-4); max-width: none; }
