@@ -58,7 +58,7 @@ export interface MentionPerson {
 	me?: boolean;
 }
 
-/** `@user_id` or `#room_id`; trailing `.` and `-` are kept outside the ID. */
+/** `@user_id` or `#room_id`; trailing `.` and `-` are kept outside the ID, and an all-digit `#room_id` isn't one. */
 const MENTION = /@(@?[A-Za-z0-9_.-]+)|#([A-Za-z0-9_.-]+)/g;
 
 /**
@@ -120,13 +120,14 @@ function escapeHtml(value: string): string {
 	return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-/** The markup of the design system's Mention component. */
-function roomChip(target: Extract<MentionTarget, { kind: 'room' }>, prefix = ''): string {
+/** A room mention: the design system's Mention component as a button that opens the room, labeled `#title` for a `#room_id`. */
+function roomChip(target: RoomMentionTarget, prefix = ''): string {
 	const label = `${prefix}${target.title}`;
 	const variant = prefix ? ' ap-mention-hash-room' : '';
 	return `<button type="button" class="ap-mention ap-mention-room${variant}" data-room-id="${escapeHtml(target.id)}" title="Open ${escapeHtml(target.title)}">${escapeHtml(label)}</button>`;
 }
 
+/** The markup of the design system's Mention component. */
 function mentionChip(target: MentionTarget): string {
 	if (target.kind === 'room') return roomChip(target);
 	const title = target.name !== target.id ? ` title="@${escapeHtml(target.id)}"` : '';
@@ -212,7 +213,8 @@ function chipText(text: string, resolve?: MentionResolver, resolveRoom?: RoomMen
 		if (before !== undefined && /[A-Za-z0-9_]/.test(before)) return match;
 		if (rawRoom === undefined) return match;
 		const id = rawRoom.replace(/[.-]+$/, '');
-		if (!id) return match;
+		// `#1` and `#1234` read as numbers and issue references, never rooms.
+		if (!id || /^\d+$/.test(id)) return match;
 		const target = resolveRoom?.(id) ?? resolve?.(id);
 		return target?.kind === 'room' ? roomChip(target, '#') + rawRoom.slice(id.length) : match;
 	});

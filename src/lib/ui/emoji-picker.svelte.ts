@@ -64,36 +64,39 @@ export interface EmojiMart {
 let loading: Promise<EmojiMart> | undefined;
 let dataLoading: Promise<EmojiMartData> | undefined;
 
+/** Forgets a failed load, so the next call tries again. */
+function retryable<T>(attempt: Promise<T>, forget: (attempt: Promise<T>) => void): Promise<T> {
+	attempt.catch(() => forget(attempt));
+	return attempt;
+}
+
+/**
+ * The emoji data alone, fetched from this app's own origin the first time
+ * shortcode autocomplete or a picker needs it: it isn't in the main bundle.
+ */
+export function loadEmojiData(): Promise<EmojiMartData> {
+	// The data package is its JSON (sets/15/native.json); its typings only describe the shape.
+	dataLoading ??= retryable(
+		(import('@emoji-mart/data') as Promise<unknown> as Promise<{ default: EmojiMartData }>).then((json) => json.default),
+		(attempt) => { if (dataLoading === attempt) dataLoading = undefined; }
+	);
+	return dataLoading;
+}
+
 /**
  * emoji-mart and its bundled data, fetched from this app's own origin the
  * first time a picker opens: neither is in the main bundle. A failed load
  * is forgotten so the next open tries again.
  */
-export function loadEmojiData(): Promise<EmojiMartData> {
-	if (!dataLoading) {
-		const attempt = (import('@emoji-mart/data') as Promise<unknown> as Promise<{ default: EmojiMartData }>).then((json) => json.default);
-		dataLoading = attempt;
-		attempt.catch(() => {
-			if (dataLoading === attempt) dataLoading = undefined;
-		});
-	}
-	return dataLoading;
-}
-
 export function loadEmojiMart(): Promise<EmojiMart> {
-	if (!loading) {
-		// The data package is its JSON (sets/15/native.json); its typings only describe the shape.
-		const data = import('@emoji-mart/data') as Promise<unknown> as Promise<{ default: EmojiMartData }>;
-		const attempt = Promise.all([import('emoji-mart'), data, import('@emoji-mart/data/i18n/en.json')]).then(([mart, json, en]) => ({
+	loading ??= retryable(
+		Promise.all([import('emoji-mart'), loadEmojiData(), import('@emoji-mart/data/i18n/en.json')]).then(([mart, data, en]) => ({
 			Picker: mart.Picker,
-			data: json.default,
+			data,
 			// Apron's voice: no exclamation marks in UI copy.
 			i18n: { ...en.default, search_no_results_1: 'No emoji found', search_no_results_2: 'Try another word' }
-		}));
-		loading = attempt;
-		attempt.catch(() => {
-			if (loading === attempt) loading = undefined;
-		});
-	}
+		})),
+		(attempt) => { if (loading === attempt) loading = undefined; }
+	);
 	return loading;
 }

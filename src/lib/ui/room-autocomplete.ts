@@ -1,42 +1,18 @@
-import type { DraftPart } from './draft';
-import { draftText, insertText } from './draft';
+import { draftText, insertText, tokenAtCaret, type CaretToken, type DraftPart } from './draft';
 
 export interface RoomSuggestion {
 	id: string;
 	title: string;
 }
 
-export interface RoomQuery {
-	query: string;
-	start: number;
-	end: number;
-}
+export type RoomQuery = CaretToken;
 
-const ROOM_CHAR = /^[A-Za-z0-9_.-]$/;
+const ROOM_CHAR = /[A-Za-z0-9_.-]/;
 const MAX_MATCHES = 8;
 
 /** Finds a #room ID at the caret, stopping at chips and whitespace. */
 export function roomQuery(parts: DraftPart[], caret: number): RoomQuery | undefined {
-	let offset = 0;
-	for (const [index, part] of parts.entries()) {
-		const length = typeof part === 'string' ? part.length : part.id.length + 1;
-		if (typeof part === 'string' && caret >= offset && caret <= offset + length) {
-			const localCaret = caret - offset;
-			const before = part.slice(0, localCaret);
-			const match = /#([A-Za-z0-9_.-]*)$/.exec(before);
-			if (!match) return undefined;
-			const hashAt = match.index;
-			const previous = hashAt > 0 ? part[hashAt - 1] : index > 0 ? parts[index - 1] : undefined;
-			if (typeof previous !== 'string' && previous !== undefined) return undefined;
-			if (previous && !/\s$/.test(previous)) return undefined;
-			const start = offset + hashAt;
-			let end = caret;
-			while (end - offset < part.length && ROOM_CHAR.test(part[end - offset])) end++;
-			return { query: match[1], start, end };
-		}
-		offset += length;
-	}
-	return undefined;
+	return tokenAtCaret(parts, caret, '#', ROOM_CHAR);
 }
 
 /** Replaces the typed #room ID with its canonical ID and leaves one separating space. */

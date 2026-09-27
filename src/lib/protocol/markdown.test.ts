@@ -26,7 +26,11 @@ describe('mentions (Appendix A.3)', () => {
 	it('links #room IDs with a hash label, but leaves unknown or embedded hashtags alone', () => {
 		expect(renderMarkdown('see #ops.', resolve)).toContain('<button type="button" class="ap-mention ap-mention-room ap-mention-hash-room" data-room-id="ops" title="Open Ops &amp; Co">#Ops &amp; Co</button>.');
 		expect(renderPlain('#nobody tag#ops', resolve)).toBe('#nobody tag#ops');
-		expect(renderMarkdown('`#ops`', resolve)).toBe('<p><code>#ops</code></p>\n');
+		expect(renderMarkdown('`#ops`', resolve)).toBe('<p><code>#ops</code></p>\n');	});
+
+	it('leaves all-digit hashes as text, even when a room has that ID', () => {
+		const numbered = (id: string) => (id === '1' ? { kind: 'room' as const, id, title: 'One' } : undefined);
+		expect(renderPlain("we're #1, see #1.", undefined, numbered)).toBe("we're #1, see #1.");
 	});
 
 	it('resolves #room_id as a room even when @id resolves to a user', () => {

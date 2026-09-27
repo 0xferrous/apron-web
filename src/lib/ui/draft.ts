@@ -170,6 +170,40 @@ export function mentionQuery(parts: DraftPart[], caret: number): { query: string
 	return undefined;
 }
 
+/** A `trigger`-prefixed token at the caret: what's typed after the trigger, and the draft span the whole token covers. */
+export interface CaretToken {
+	query: string;
+	start: number;
+	end: number;
+}
+
+/**
+ * The token the caret sits in: `trigger` then a run of characters matching
+ * `char`, starting the draft or following whitespace (a chip right before it
+ * doesn't count), and at least `minLength` long. `end` takes in the rest of
+ * the token after the caret, so picking a suggestion replaces all of it.
+ */
+export function tokenAtCaret(parts: DraftPart[], caret: number, trigger: string, char: RegExp, minLength = 0): CaretToken | undefined {
+	let offset = 0;
+	for (const [index, part] of parts.entries()) {
+		const length = typeof part === 'string' ? part.length : part.id.length + 1;
+		if (typeof part === 'string' && caret >= offset && caret <= offset + length) {
+			const local = caret - offset;
+			let from = local;
+			while (from > 0 && char.test(part[from - 1])) from--;
+			const at = from - 1;
+			if (part[at] !== trigger || local - from < minLength) return undefined;
+			const before = at > 0 ? part[at - 1] : parts[index - 1];
+			if (before !== undefined && (typeof before !== 'string' || !/\s$/.test(before))) return undefined;
+			let end = local;
+			while (end < part.length && char.test(part[end])) end++;
+			return { query: part.slice(from, local), start: offset + at, end: offset + end };
+		}
+		offset += length;
+	}
+	return undefined;
+}
+
 /** Replaces the draft text from `start` to `end` with a chip for `id` and a space; the caret goes after the space. */
 export function insertMention(parts: DraftPart[], start: number, end: number, id: string): { parts: DraftPart[]; caret: number } {
 	const out: DraftPart[] = [];
