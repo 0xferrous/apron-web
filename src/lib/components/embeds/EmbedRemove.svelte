@@ -1,4 +1,5 @@
 <script lang="ts">
+	import X from '@lucide/svelte/icons/x';
 	/**
 	 * The (x) on an embed's corner. Place it inside an `.embed-slot`: it shows
 	 * while the slot is hovered or it has focus, and always on touch screens.
@@ -7,7 +8,7 @@
 </script>
 
 <button class="embed-remove" type="button" aria-label={label} title={label} onclick={onremove}>
-	<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+	<X size={12} strokeWidth={2.5} aria-hidden="true" />
 </button>
 
 <style>
