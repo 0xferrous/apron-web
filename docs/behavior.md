@@ -7,6 +7,16 @@ The default connection is `VITE_DEFAULT_SERVER_URL` from the build, which
 `.env.production` sets to `wss://server.apron.chat/` for every production build
 (web.apron.chat and pull request Previews). Local development, and a build with
 `VITE_DEFAULT_SERVER_URL=` (empty), use same-origin `/ws` instead.
+
+`/__preview` mounts this same app against a page-local in-memory WebSocket
+server, not the saved, configured, or same-origin backend. It seeds a guest,
+rooms, a thread, people, Markdown examples, and a message moved into the thread,
+and implements the app's protocol
+requests (auth, room listings/history, messages, reactions, room changes,
+profile updates, activity, commands, and ping). Changes last only for the page
+lifetime; the preview does not advertise upload or streaming capabilities.
+Local development and builds with an empty `VITE_DEFAULT_SERVER_URL` retain the
+same-origin default.
 After a failed WebSocket handshake, the client makes a bounded HTTP diagnostic
 request to the same URL with `?apron_connection_status=1`. Supporting servers
 can expose a capacity error and `Retry-After` through CORS; the client displays

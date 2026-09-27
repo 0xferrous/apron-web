@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount, tick, untrack } from 'svelte';
 	import { passkeySupportError } from '$lib/protocol/webauthn';
+	import { previewWebSocketFactory } from '$lib/preview/memory-server';
 	import { ChatClient, childRooms, defaultWebSocketUrl, findMessage, normalizeWebSocketUrl, timelineMessages, type RoomSnapshot } from '$lib/protocol/client';
 	import { serverOrigin } from '$lib/protocol/embeds';
 	import { compareLogIds } from '$lib/protocol/reducer';
@@ -86,6 +87,7 @@
 	const sidebar = new SidebarLayout();
 
 	let client = $state<ChatClient | undefined>();
+	let previewMode = $state(false);
 	let serverInput = $state('');
 	let displayName = $state('');
 	/** The `user_id`s the composer's chips mention (§3.5), sent as `body.mentions`. */
@@ -363,10 +365,11 @@
 
 	onMount(() => {
 		passkeyUnavailable = passkeySupportError();
+		previewMode = window.location.pathname === '/__preview' || window.location.pathname.startsWith('/__preview/');
 		sidebar.load();
-		serverInput = loadServerUrl() ?? defaultWebSocketUrl(window.location);
-		displayName = loadDisplayName();
-		recentServers = loadRecentServers();
+		serverInput = previewMode ? 'ws://apron-preview.invalid' : loadServerUrl() ?? defaultWebSocketUrl(window.location);
+		displayName = previewMode ? 'Preview User' : loadDisplayName();
+		recentServers = previewMode ? [] : loadRecentServers();
 		notificationsEnabled = loadNotificationsEnabled();
 		notificationScope = loadNotificationScope();
 		notificationState = notificationPermission();
@@ -377,7 +380,11 @@
 			permission = status;
 			status.onchange = refreshNotificationPermission;
 		}).catch(() => undefined);
-		const chat = new ChatClient(normalizeWebSocketUrl(serverInput, window.location), displayName);
+		const chat = new ChatClient(
+			normalizeWebSocketUrl(serverInput, window.location),
+			displayName,
+			previewMode ? previewWebSocketFactory : undefined
+		);
 		const unsubscribe = chat.subscribe((next) => {
 			session.apply(next, chat);
 			directory.apply(next, serverOrigin(chat.url));
@@ -404,6 +411,7 @@
 
 	/** The profile's "Sign in with a passkey" opens here too, carrying the handle typed there. */
 	function openConnect(options: { passkey?: boolean; name?: string } = {}): void {
+		if (previewMode) return;
 		connectScheme = options.passkey ? 'webauthn' : undefined;
 		if (options.name) displayName = options.name;
 		connectOpen = true;
@@ -498,6 +506,7 @@
 	}
 
 	function connected(): void {
+		if (previewMode) return;
 		if (client) recentServers = rememberServer(recentServers, client.url, session.server?.name || backendHost(client.url) || undefined);
 		connectOpen = false;
 	}
