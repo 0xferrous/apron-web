@@ -33,7 +33,7 @@
 	import { MessageSelection } from '$lib/ui/selection.svelte';
 	import { SessionView } from '$lib/ui/session.svelte';
 	import { SidebarLayout } from '$lib/ui/sidebar.svelte';
-	import { loadDisplayName, loadNotificationScope, loadNotificationsEnabled, loadRecentServers, loadServerUrl, rememberServer, saveDisplayName, saveNotificationScope, saveNotificationsEnabled, type RecentServer } from '$lib/ui/storage';
+	import { loadDisplayName, loadMemberListOpen, loadNotificationScope, loadNotificationsEnabled, loadRecentServers, loadServerUrl, rememberServer, saveDisplayName, saveMemberListOpen, saveNotificationScope, saveNotificationsEnabled, type RecentServer } from '$lib/ui/storage';
 	import { buildRoomTimeline, buildThreadTimeline, threadEntries, threadTitleFor } from '$lib/ui/timeline';
 	import { idDateTime, idIso, idTime } from '$lib/ui/time';
 	import { tabTitle } from '$lib/ui/attention';
@@ -120,7 +120,12 @@
 	/** Messages a thread is being started from, for the button's "Starting…". */
 	let startingThreads = $state<Record<string, true>>({});
 	let mobilePane = $state<'rooms' | 'main'>('main');
+	/**
+	 * The member list: a column on wide screens, shown as last left there; an
+	 * overlay on narrow ones, closed until asked for.
+	 */
 	let memberListOpen = $state(false);
+	let memberListWide = false;
 	let composer = $state<Composer | undefined>();
 	let messageScroll = $state<HTMLDivElement | undefined>();
 	let stickToBottom = $state(true);
@@ -372,8 +377,11 @@
 		passkeyUnavailable = passkeySupportError();
 		sidebar.load();
 		const memberListMedia = window.matchMedia('(min-width: 960px)');
-		memberListOpen = memberListMedia.matches;
-		const memberListMediaChange = (event: MediaQueryListEvent) => (memberListOpen = event.matches);
+		const memberListMediaChange = ({ matches }: { matches: boolean }) => {
+			memberListWide = matches;
+			memberListOpen = matches && loadMemberListOpen();
+		};
+		memberListMediaChange(memberListMedia);
 		memberListMedia.addEventListener('change', memberListMediaChange);
 		serverInput = previewMode ? 'ws://apron-preview.invalid' : loadServerUrl() ?? defaultWebSocketUrl(window.location);
 		displayName = previewMode ? 'Preview User' : loadDisplayName();
@@ -739,6 +747,12 @@
 		composer?.focus();
 	}
 
+	/** Toggling on a wide screen is remembered for the next visit; the narrow overlay starts closed. */
+	function toggleMemberList(): void {
+		memberListOpen = !memberListOpen;
+		if (memberListWide) saveMemberListOpen(memberListOpen);
+	}
+
 	// --- Rooms ---
 
 	function joinRoom(roomId: string): void {
@@ -1098,7 +1112,7 @@
 	class="app ap-shell ap-shell-norail"
 	class:side-collapsed={sidebar.collapsed}
 	class:side-resizing={sidebar.resizing}
-	class:member-list-sidebar-closed={!memberListOpen}
+	class:member-list-open={memberListOpen}
 	data-pane={mobilePane}
 	style:--sidebar-w="{sidebar.collapsed ? 0 : sidebar.width}px"
 >
@@ -1124,8 +1138,8 @@
 				editDisabled={!paneReady}
 				canLeave={session.canLeaveRooms && !session.readOnly && Boolean(paneRoom?.joined)}
 				canJoin={session.canManageRooms && !session.readOnly && Boolean(paneRoom) && !paneRoom?.joined}
-				memberListOpen={memberListOpen}
-				onback={() => (mobilePane = 'rooms')} onroom={backToRoom} onedit={() => (threadEditorOpen = !threadEditorOpen)} onleave={leavePane} onjoin={joinPane} onmemberlist={() => (memberListOpen = !memberListOpen)}
+				{memberListOpen}
+				onback={() => (mobilePane = 'rooms')} onroom={backToRoom} onedit={() => (threadEditorOpen = !threadEditorOpen)} onleave={leavePane} onjoin={joinPane} onmemberlist={toggleMemberList}
 			/>
 			{#if threadEditorOpen && activeThreadEntry}
 				{#key activeThreadEntry.id}
@@ -1281,7 +1295,7 @@
 			</div>
 		{/if}
 	</main>
-	<MemberListSidebar {session} {activeThread} open={memberListOpen} />
+	<MemberListSidebar {session} room={paneRoom} open={memberListOpen} />
 
 	{#if feedback.current}
 		<div class="toast">
@@ -1303,8 +1317,6 @@
 	:global(*), :global(*::before), :global(*::after) { box-sizing: border-box; }
 	:global(button), :global(input), :global(textarea), :global(select) { font: inherit; }
 	.app { height: 100dvh; min-height: 100%; position: relative; }
-	.app.ap-shell-norail { grid-template-columns: var(--sidebar-w) minmax(0, 1fr) 240px; }
-	.app.ap-shell-norail.member-list-sidebar-closed { grid-template-columns: var(--sidebar-w) minmax(0, 1fr); }
 	.side-collapsed :global(.ap-shell-side) { border-right: 0; visibility: hidden; }
 	.side-resizing, .side-resizing :global(*) { user-select: none; }
 	.banner { padding: var(--space-2) var(--space-4) 0; }
@@ -1325,15 +1337,15 @@
 	.toast :global(.ap-status) { box-shadow: var(--shadow-float); }
 	.toast-right { left: auto; right: var(--space-4); transform: none; }
 
-	@media (max-width: 959px) {
-		.app.ap-shell-norail { grid-template-columns: var(--sidebar-w) minmax(0, 1fr); }
+	/* Wide screens give an open member list its own column; narrower ones overlay it. */
+	@media (min-width: 960px) {
+		.app.member-list-open { grid-template-columns: var(--sidebar-w) minmax(0, 1fr) 240px; }
 	}
 	/* Under 720px it's one pane at a time: rooms, then the room or thread, pushed like pages. */
 	@media (max-width: 719px) {
-		.app.ap-shell-norail { grid-template-columns: minmax(0, 1fr); }
-		.app.ap-shell-norail.member-list-sidebar-closed { grid-template-columns: minmax(0, 1fr); }
+		.app { grid-template-columns: minmax(0, 1fr); }
 		.app[data-pane='main'] :global(.ap-shell-side) { display: none; }
-		.app[data-pane='rooms'] .ap-shell-main { display: none; }
+		.app[data-pane='rooms'] .ap-shell-main, .app[data-pane='rooms'] :global(.member-list) { display: none; }
 		.side-collapsed :global(.ap-shell-side) { visibility: visible; }
 		.typing-row { display: none; }
 		.toast-right { right: var(--space-4); left: var(--space-4); max-width: none; }

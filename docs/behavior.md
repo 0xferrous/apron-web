@@ -39,10 +39,6 @@ asks, or until their next message arrives in that room.
 With the `activity` cap the client also sends `activity` `{away: true}` while
 the tab is hidden or unfocused and `{away: false}` when it is back, so the
 server can push to your other devices instead; it is never shown to anyone.
-The Member list button at the end of the room title bar toggles a right-hand
-sidebar that lists the current room's members from its `room_list` snapshot.
-It starts open on wide screens and appears as an overlay on narrow screens.
-The sidebar does not show typing or connection status.
 Explicit server URLs keep their path: a bare hostname connects at `/`, while
 servers that require `/ws` should be entered with that suffix.
 
@@ -90,6 +86,13 @@ with the `@user_id` when someone else shows under the same name. The lines
 never count as unread or mention you, and a message after one starts a new
 sender group.
 
+The Member list button at the end of the room title bar toggles a right-hand
+sidebar listing the open room's or thread's members from its `room_list`
+snapshot. On wide screens it is a column, open until you close it, and that
+choice is remembered; on narrow screens it overlays the conversation, starts
+closed, and hides with the conversation on the phone's rooms pane. It shows no
+typing or connection status.
+
 Mentions follow the `@user_id` convention ([PROTOCOL.md Appendix A.3](https://github.com/shazow/apron/blob/main/PROTOCOL.md#a3-mention-text)). Typing `@` in the
 composer opens the mention picker over the room's members (from the room's
 listing, kept current by the `membership` records of joins and leaves), or the
@@ -104,7 +107,7 @@ the field reads by name while the wire stays ID-based, and each chip's `user_id`
 goes in `body.mentions` ([PROTOCOL.md §3.5](https://github.com/shazow/apron/blob/main/PROTOCOL.md#35-messages)): a chip deleted before sending mentions no one,
 and an edit resubmits the message's mentions. A rendered body (plain or Markdown, never inside
 code) shows a known user's mention as a chip with their current name, a `#room_id`
-(or legacy `@room_id`) as a link that opens the room (or joins it), and unknown
+(or the protocol's `@room_id`) as a link that opens the room (or joins it), and unknown
 IDs as written. Typing `#` in the composer opens room autocomplete over known
 rooms and threads, searchable by title or ID; choosing one inserts its `#room_id`. A fenced
 code block that names a known language (` ```ts `, ` ```py `, ` ```diff `, …)

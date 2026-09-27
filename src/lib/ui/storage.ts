@@ -10,6 +10,7 @@ const KEY = {
 	sidebar: 'apron.sidebar',
 	notificationsEnabled: 'apron.desktopNotifications',
 	notificationScope: 'apron.notificationScope',
+	memberList: 'apron.memberList',
 	/** app.html reads this one too, to apply the theme before the app loads. */
 	appearance: 'apron.appearance'
 } as const;
@@ -97,6 +98,15 @@ export function loadSidebarPrefs(): Partial<SidebarPrefs> {
 
 export function saveSidebarPrefs(prefs: SidebarPrefs): void {
 	write(KEY.sidebar, JSON.stringify(prefs));
+}
+
+/** Whether the member list shows on wide screens; unset until toggled there, when it shows. */
+export function loadMemberListOpen(): boolean {
+	return read(KEY.memberList) !== 'false';
+}
+
+export function saveMemberListOpen(open: boolean): void {
+	write(KEY.memberList, String(open));
 }
 
 export function loadNotificationsEnabled(): boolean {

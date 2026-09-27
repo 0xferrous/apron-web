@@ -616,7 +616,7 @@
 				{#if canRecord}
 					<button class="ap-iconbtn" class:ap-iconbtn-rec={recording} type="button" aria-label={recording ? 'Stop recording' : 'Record a voice message'} aria-pressed={recording} title={recording ? 'Stop recording' : 'Record a voice message'} {disabled} onclick={() => (recording ? stopRecording() : startRecording())}>
 						{#if recording}
-							<Square size={16} fill="currentColor" stroke="currentColor" strokeWidth={0} aria-hidden="true" />
+							<Square size={12} fill="currentColor" stroke="currentColor" strokeWidth={0} aria-hidden="true" />
 						{:else}
 							<Mic size={18} aria-hidden="true" />
 						{/if}
