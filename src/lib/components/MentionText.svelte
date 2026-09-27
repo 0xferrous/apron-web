@@ -13,4 +13,4 @@
 	let segments = $derived(mentionSegments(text, directory.resolve, directory.resolveRoom));
 </script>
 
-{#each segments as segment, index (index)}{#if typeof segment === 'string'}{segment}{:else}<span class={mentionClass(segment)} title={segment.target.kind === 'user' ? `@${segment.target.id}` : `#${segment.target.id}`}>{mentionLabel(segment)}</span>{/if}{/each}
+{#each segments as segment, index (index)}{#if typeof segment === 'string'}{segment}{:else}<span class={mentionClass(segment)} title={segment.target.kind === 'room' ? `#${segment.target.id}` : segment.target.name !== segment.target.id ? `@${segment.target.id}` : undefined}>{mentionLabel(segment)}</span>{/if}{/each}

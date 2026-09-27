@@ -98,7 +98,8 @@ export function collapseMentions(parts: DraftPart[], people: MentionPerson[], op
 				at += run;
 				continue;
 			}
-			const before = at > 0 ? part[at - 1] : typeof previous === 'string' ? previous[previous.length - 1] : undefined;
+			// A chip right before sends as `@id`, which ends in an ID character: readers would see this as text.
+			const before = at > 0 ? part[at - 1] : typeof previous === 'string' ? previous[previous.length - 1] : previous ? 'x' : undefined;
 			const room = char === '#';
 			if ((char !== '@' && !room) || fence !== 0 || (before !== undefined && (room ? BEFORE_ROOM : BEFORE_MENTION).test(before))) {
 				at += 1;

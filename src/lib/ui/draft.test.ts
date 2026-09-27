@@ -144,6 +144,9 @@ describe('composer room chips', () => {
 		expect(typedRoom('a#general now').parts).toEqual(['a#general now']);
 		expect(typedRoom('# general').parts).toEqual(['# general']);
 		expect(typedRoom('`#general` now').parts).toEqual(['`#general` now']);
+		// Straight after a chip, `@bob#general` reads as text to everyone else.
+		expect(collapseMentions([{ id: 'bob' }, '#general now'], people, { caret: 16, rooms }).parts).toEqual([{ id: 'bob' }, '#general now']);
+		expect(collapseMentions([{ id: 'bob' }, '@ada_1 now'], people, { caret: 14 }).parts).toEqual([{ id: 'bob' }, '@ada_1 now']);
 	});
 
 	it('waits while the #room_id is still being typed', () => {

@@ -347,10 +347,6 @@
 	}
 
 	function keydown(event: KeyboardEvent): void {
-		if (event.key === 'Backspace' && !event.isComposing && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && backspaceChip()) {
-			event.preventDefault();
-			return;
-		}
 		if (completion && !event.isComposing) {
 			if (event.key === 'Escape') {
 				event.preventDefault();
@@ -378,7 +374,16 @@
 		}
 	}
 
-	/** Backspace against a chip turns it back into the text it showed, to edit; false when the caret isn't right after one. */
+	/**
+	 * Backspace against a chip turns it back into the text it showed, to edit.
+	 * Handled as the delete it asks for rather than the key, since phone
+	 * keyboards often send no Backspace keydown.
+	 */
+	function beforeinput(event: InputEvent): void {
+		if (event.inputType === 'deleteContentBackward' && !event.isComposing && backspaceChip()) event.preventDefault();
+	}
+
+	/** Reverts the chip right before a bare caret; false when there's none. */
 	function backspaceChip(): boolean {
 		if (!field) return false;
 		const { parts, caret, anchor } = readDraft(field);
@@ -677,6 +682,7 @@
 				contenteditable={disabled ? 'false' : 'plaintext-only'}
 				spellcheck="true"
 				bind:this={field}
+				onbeforeinput={beforeinput}
 				oninput={input}
 				oncompositionend={() => collapse(false)}
 				onkeydown={keydown}
