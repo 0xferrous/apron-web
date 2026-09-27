@@ -182,16 +182,20 @@ defaults; a pick toggles your reaction with that emoji. Reactions show as chips 
 highlighted when one is yours, with a tooltip naming who reacted. Clicking a
 chip toggles your reaction. Tombstones show no reactions.
 
-The composer's emoji button (always there: emoji are text) opens the same
-picker and inserts the emoji at the caret, over any selection, leaving mention
-chips and command mode as they were. The picker is
+Typing `:shortcode` in the composer opens an emoji autocomplete; arrows move,
+Tab or Enter inserts the highlighted native emoji in place of the shortcode,
+and Escape dismisses it. Suggestions search emoji shortcodes, names, aliases and
+keywords. The composer's emoji button (always there: emoji are text) opens the
+same full picker and inserts the emoji at the caret, over any selection,
+leaving mention chips and command mode as they were. The picker is
 [emoji-mart](https://github.com/missive/emoji-mart), drawn by `EmojiPopover`
 outside the app shell so nothing clips it: a popover beside its button on wide
 screens, a bottom sheet on narrow ones, in the app's theme and tokens. Escape
-or a press outside closes it. emoji-mart and `@emoji-mart/data` load with a
-dynamic `import()` the first time a picker opens, so they stay out of the main
-bundle, and the picker gets its data, English strings and native glyphs passed
-in, so it never fetches from a CDN.
+or a press outside closes it. The emoji data loads with a dynamic `import()`
+when shortcode autocomplete is first used; emoji-mart itself loads dynamically
+the first time the full picker opens. Both stay out of the main bundle, and the
+picker gets its data, English strings and native glyphs passed in, so it never
+fetches from a CDN.
 
 Embeds render by kind, in the design system's components ([PROTOCOL.md §4.6](https://github.com/shazow/apron/blob/main/PROTOCOL.md#46-embeds-and-avatars)):
 
