@@ -112,7 +112,13 @@ and an edit resubmits the message's mentions. A rendered body (plain or Markdown
 code) shows a known user's mention as a chip with their current name, a `#room_id`
 (or the protocol's `@room_id`) as a link that opens the room (or joins it), and unknown
 IDs as written. Typing `#` in the composer opens room autocomplete over known
-rooms and threads, searchable by title or ID; choosing one inserts its `#room_id`. A fenced
+rooms and threads, searchable by title or ID; choosing one inserts a chip
+showing `#title` that is sent as `#room_id`, and a typed `#room_id` naming a
+known room collapses into the same chip once finished (it mentions no one).
+Backspace right after either kind of chip turns it back into the text it
+showed (`@Ada Lovelace`, `#Deploy checklist`) to edit. A reply's quote above
+its message and the "Replying to" line above the composer show the replied
+message's first line with its mentions drawn the same way. A fenced
 code block that names a known language (` ```ts `, ` ```py `, ` ```diff `, …)
 is syntax-highlighted once that language's highlighter loads, fetched the first
 time a block needs it; other blocks stay plain. Only

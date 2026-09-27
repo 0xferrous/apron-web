@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { insertRoomMention, roomQuery, searchRooms, type RoomSuggestion } from './room-autocomplete';
+import { roomQuery, searchRooms, type RoomSuggestion } from './room-autocomplete';
 
 const rooms: RoomSuggestion[] = [
 	{ id: 'general', title: 'General' },
@@ -23,10 +23,5 @@ describe('room autocomplete', () => {
 		expect(searchRooms(rooms, 'operations west')).toEqual([rooms[3]]);
 		expect(searchRooms(rooms, 'deploys')).toEqual([rooms[1]]);
 		expect(searchRooms(rooms, 'missing')).toEqual([]);
-	});
-
-	it('replaces a typed ID with its canonical ID and keeps one separating space', () => {
-		expect(insertRoomMention(['hi #dep!'], 3, 7, 'deploys')).toEqual({ parts: ['hi #deploys !'], caret: 12 });
-		expect(insertRoomMention(['hi #dep next'], 3, 7, 'deploys')).toEqual({ parts: ['hi #deploys next'], caret: 11 });
 	});
 });

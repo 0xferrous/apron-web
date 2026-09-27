@@ -120,18 +120,39 @@ function escapeHtml(value: string): string {
 	return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-/** A room mention: the design system's Mention component as a button that opens the room, labeled `#title` for a `#room_id`. */
-function roomChip(target: RoomMentionTarget, prefix = ''): string {
-	const label = `${prefix}${target.title}`;
-	const variant = prefix ? ' ap-mention-hash-room' : '';
-	return `<button type="button" class="ap-mention ap-mention-room${variant}" data-room-id="${escapeHtml(target.id)}" title="Open ${escapeHtml(target.title)}">${escapeHtml(label)}</button>`;
+/** A mention found in text: what it names, and whether it was written `#room_id`. */
+export interface Mention {
+	target: MentionTarget;
+	hash: boolean;
 }
 
-/** The markup of the design system's Mention component. */
-function mentionChip(target: MentionTarget): string {
-	if (target.kind === 'room') return roomChip(target);
+/** Text with its mentions of known users and rooms picked out. */
+export type MentionSegment = string | Mention;
+
+/**
+ * The design system's Mention component, which every mention renders as (in
+ * messages, reply quotes and composer chips): its text is `@name`, or a room's
+ * title, `#title` when written `#room_id`.
+ */
+export function mentionLabel({ target, hash }: Mention): string {
+	return target.kind === 'user' ? `@${target.name}` : `${hash ? '#' : ''}${target.title}`;
+}
+
+export function mentionClass({ target, hash }: Mention): string {
+	if (target.kind === 'user') return target.me ? 'ap-mention ap-mention-me' : 'ap-mention';
+	return `ap-mention ap-mention-room${hash ? ' ap-mention-hash-room' : ''}`;
+}
+
+/** A user as a span, with their ID on hover when their name differs; a room as a button that opens it. */
+function mentionChip(mention: Mention): string {
+	const { target } = mention;
+	const label = escapeHtml(mentionLabel(mention));
+	const className = mentionClass(mention);
+	if (target.kind === 'room') {
+		return `<button type="button" class="${className}" data-room-id="${escapeHtml(target.id)}" title="Open ${escapeHtml(target.title)}">${label}</button>`;
+	}
 	const title = target.name !== target.id ? ` title="@${escapeHtml(target.id)}"` : '';
-	return `<span class="ap-mention${target.me ? ' ap-mention-me' : ''}" data-user-id="${escapeHtml(target.id)}"${title}>@${escapeHtml(target.name)}</span>`;
+	return `<span class="${className}" data-user-id="${escapeHtml(target.id)}"${title}>${label}</span>`;
 }
 
 /**
@@ -199,22 +220,34 @@ function emojiText(text: string): string {
 
 /** Replaces known users and rooms in escaped text; entities never contain ID characters. */
 function chipText(text: string, resolve?: MentionResolver, resolveRoom?: RoomMentionResolver): string {
-	if (!resolve && !resolveRoom) return text;
-	return text.replace(MENTION, (match, rawUser: string | undefined, rawRoom: string | undefined, offset: number) => {
+	return mentionSegments(text, resolve, resolveRoom)
+		.map((segment) => (typeof segment === 'string' ? segment : mentionChip(segment)))
+		.join('');
+}
+
+/**
+ * Splits text around its mentions of known users (`@user_id`) and rooms
+ * (`#room_id`, or `@room_id` when no user has that ID). Unknown IDs, and
+ * an `@` or `#` right after a letter or digit, stay text.
+ */
+export function mentionSegments(text: string, resolve?: MentionResolver, resolveRoom?: RoomMentionResolver): MentionSegment[] {
+	if (!resolve && !resolveRoom) return [text];
+	const segments: MentionSegment[] = [];
+	let last = 0;
+	for (const match of text.matchAll(MENTION)) {
+		const [whole, rawUser, rawRoom] = match;
+		const offset = match.index;
 		const before = text[offset - 1];
-		if (rawUser !== undefined) {
-			if (before !== undefined && /[A-Za-z0-9]/.test(before)) return match;
-			const id = rawUser.replace(/[.-]+$/, '');
-			if (!id || id === '@') return match;
-			const target = resolve?.(id);
-			const rest = rawUser.slice(id.length);
-			return target ? mentionChip(target) + rest : match;
-		}
-		if (before !== undefined && /[A-Za-z0-9_]/.test(before)) return match;
-		if (rawRoom === undefined) return match;
-		const id = rawRoom.replace(/[.-]+$/, '');
-		if (!id) return match;
-		const target = resolveRoom?.(id) ?? resolve?.(id);
-		return target?.kind === 'room' ? roomChip(target, '#') + rawRoom.slice(id.length) : match;
-	});
+		const raw = rawUser ?? rawRoom;
+		if (before !== undefined && (rawUser !== undefined ? /[A-Za-z0-9]/ : /[A-Za-z0-9_]/).test(before)) continue;
+		const id = raw.replace(/[.-]+$/, '');
+		if (!id || id === '@') continue;
+		const target = rawUser !== undefined ? resolve?.(id) : resolveRoom?.(id) ?? resolve?.(id);
+		if (!target || (rawRoom !== undefined && target.kind !== 'room')) continue;
+		if (offset > last) segments.push(text.slice(last, offset));
+		segments.push({ target, hash: rawRoom !== undefined });
+		last = offset + whole.length - (raw.length - id.length);
+	}
+	if (last < text.length) segments.push(text.slice(last));
+	return segments;
 }

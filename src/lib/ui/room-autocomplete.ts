@@ -1,4 +1,4 @@
-import { draftText, insertText, tokenAtCaret, type CaretToken, type DraftPart } from './draft';
+import { tokenAtCaret, type CaretToken, type DraftPart } from './draft';
 
 export interface RoomSuggestion {
 	id: string;
@@ -13,12 +13,6 @@ const MAX_MATCHES = 8;
 /** Finds a #room ID at the caret, stopping at chips and whitespace. */
 export function roomQuery(parts: DraftPart[], caret: number): RoomQuery | undefined {
 	return tokenAtCaret(parts, caret, '#', ROOM_CHAR);
-}
-
-/** Replaces the typed #room ID with its canonical ID and leaves one separating space. */
-export function insertRoomMention(parts: DraftPart[], start: number, end: number, id: string): { parts: DraftPart[]; caret: number } {
-	const after = draftText(parts).slice(end);
-	return insertText(parts, start, end, `#${id}${/^\s/.test(after) ? '' : ' '}`);
 }
 
 /** Finds rooms by ID or title, preferring exact and then prefix matches. */

@@ -4,11 +4,11 @@
 	import Mic from '@lucide/svelte/icons/mic';
 	import Smile from '@lucide/svelte/icons/smile';
 	import { untrack } from 'svelte';
-	import type { MentionPerson } from '$lib/protocol/markdown';
-	import { collapseMentions, draftMentions, draftText, insertMention, insertText, mentionQuery, normalizeDraft, type DraftPart } from '$lib/ui/draft';
+	import { mentionClass, mentionLabel, type Mention, type MentionPerson } from '$lib/protocol/markdown';
+	import { collapseMentions, draftMentions, draftText, insertMention, insertText, mentionQuery, normalizeDraft, unchip, type DraftChip, type DraftPart } from '$lib/ui/draft';
 	import { isAutocompleteDismissed, type DismissedAutocomplete } from '$lib/ui/autocomplete-dismiss';
 	import { emojiQuery as findEmojiQuery, searchEmoji, type EmojiQuery, type EmojiSuggestion } from '$lib/ui/emoji-autocomplete';
-	import { insertRoomMention, roomQuery as findRoomQuery, searchRooms, type RoomQuery, type RoomSuggestion } from '$lib/ui/room-autocomplete';
+	import { roomQuery as findRoomQuery, searchRooms, type RoomQuery, type RoomSuggestion } from '$lib/ui/room-autocomplete';
 	import type { EmojiMartData } from '@emoji-mart/data';
 	import { emojiAnchor, emojiPicker, loadEmojiData } from '$lib/ui/emoji-picker.svelte';
 	import { isCommand } from '$lib/ui/commands';
@@ -17,6 +17,7 @@
 	import { clockLabel } from '$lib/ui/time';
 	import AutocompletePicker from './AutocompletePicker.svelte';
 	import Avatar from './Avatar.svelte';
+	import MentionText from './MentionText.svelte';
 	import Embed from './embeds/Embed.svelte';
 	import EmbedRemove from './embeds/EmbedRemove.svelte';
 
@@ -51,8 +52,8 @@
 		people: MentionPerson[];
 		/** Rooms and threads available for `#room` mentions. */
 		rooms?: RoomSuggestion[];
-		/** "Dana: text" for the message being replied to, when there is one. */
-		replyPreview?: string;
+		/** The message being replied to, when there is one: its sender and first line, or why it can't be shown. */
+		reply?: { name?: string; text: string };
 		oninput: () => void;
 		onsend: () => void;
 		/** Picked files or a finished voice clip, to send with whatever is in the field. */
@@ -61,7 +62,7 @@
 		/** The mention picker opened: a moment to refresh who can be named. */
 		onmention?: () => void;
 	}
-	let { value = $bindable(), mentions = $bindable([]), dismissed = $bindable([]), placeholder, disabled, canUpload, canCommand = false, people, rooms = [], replyPreview, oninput, onsend, onfiles, oncancelreply, onmention }: Props = $props();
+	let { value = $bindable(), mentions = $bindable([]), dismissed = $bindable([]), placeholder, disabled, canUpload, canCommand = false, people, rooms = [], reply, oninput, onsend, onfiles, oncancelreply, onmention }: Props = $props();
 
 	let field = $state<HTMLDivElement | undefined>();
 	let attachInput = $state<HTMLInputElement | undefined>();
@@ -89,6 +90,8 @@
 	let canRecord = $derived(canUpload && typeof MediaRecorder !== 'undefined' && Boolean(navigator.mediaDevices?.getUserMedia));
 	let matches = $derived(query === undefined ? [] : matching(query));
 	let emojiMatches = $derived(emojiFound && emojiData ? searchEmoji(emojiData, emojiFound.query) : []);
+	/** The IDs a typed `#room_id` collapses into a chip for. */
+	let roomIds = $derived(rooms.map((room) => room.id));
 	let roomMatches = $derived(roomFound ? searchRooms(rooms, roomFound.query) : []);
 	let pickerOpen = $derived(query !== undefined && !disabled);
 	let roomPickerOpen = $derived(roomFound !== undefined && !disabled);
@@ -178,7 +181,7 @@
 		if (!current || (shown?.field === current && shown.text === text)) return;
 		untrack(() => {
 			lastSelection = undefined;
-			const collapsed = collapseMentions([text], people, { caret: text.length, isUser });
+			const collapsed = collapseMentions([text], people, { caret: text.length, isUser, rooms: roomIds });
 			draw(current, collapsed.parts, document.activeElement === current ? collapsed.caret : undefined);
 			commit(current, collapsed.parts, false);
 		});
@@ -221,6 +224,9 @@
 					if (child.dataset.userId) {
 						parts.push({ id: child.dataset.userId });
 						length += child.dataset.userId.length + 1;
+					} else if (child.dataset.roomId) {
+						parts.push({ id: child.dataset.roomId, room: true });
+						length += child.dataset.roomId.length + 1;
 					} else if (child.tagName === 'BR') {
 						// A break that ends its block is the browser's placeholder for an empty line, not a line.
 						if (index < node.childNodes.length - 1) text('\n');
@@ -237,21 +243,30 @@
 		return { parts: normalizeDraft(parts), caret, anchor };
 	}
 
-	function chip(id: string): HTMLSpanElement {
-		const person = people.find((entry) => entry.id === id) ?? directory.person({ user_id: id });
-		const name = person?.name?.trim() || id;
+	/** What a chip names, as the Mention component every rendered mention uses. */
+	function chipMention(part: DraftChip): Mention {
+		if (part.room) return { target: { kind: 'room', id: part.id, title: directory.resolveRoom(part.id)?.title ?? part.id }, hash: true };
+		const person = people.find((entry) => entry.id === part.id) ?? directory.person({ user_id: part.id });
+		return { target: { kind: 'user', id: part.id, name: person?.name?.trim() || part.id, me: directory.isMe(part.id) }, hash: false };
+	}
+
+	/** A chip: the Mention component as a non-editable span, its ID on hover. */
+	function chip(part: DraftChip): HTMLSpanElement {
+		const mention = chipMention(part);
+		const label = mentionLabel(mention);
 		const element = document.createElement('span');
-		element.className = directory.isMe(id) ? 'ap-mention ap-mention-me' : 'ap-mention';
+		element.className = mentionClass(mention);
 		element.contentEditable = 'false';
-		element.dataset.userId = id;
-		if (name !== id) element.title = `@${id}`;
-		element.textContent = `@${name}`;
+		if (part.room) element.dataset.roomId = part.id;
+		else element.dataset.userId = part.id;
+		if (label !== draftText([part])) element.title = draftText([part]);
+		element.textContent = label;
 		return element;
 	}
 
 	/** Redraws the field from draft parts; with a caret, puts the selection there. */
 	function draw(root: HTMLElement, parts: DraftPart[], caret: number | undefined): void {
-		const nodes: Node[] = parts.map((part) => (typeof part === 'string' ? document.createTextNode(part) : chip(part.id)));
+		const nodes: Node[] = parts.map((part) => (typeof part === 'string' ? document.createTextNode(part) : chip(part)));
 		// A trailing line break needs a placeholder to show the empty line.
 		if (draftText(parts).endsWith('\n')) nodes.push(document.createElement('br'));
 		root.replaceChildren(...nodes);
@@ -266,7 +281,7 @@
 		let offset = 0;
 		let placed = false;
 		for (const [index, node] of [...root.childNodes].entries()) {
-			const length = node.nodeType === Node.TEXT_NODE ? (node.textContent ?? '').length : node instanceof HTMLElement && node.dataset.userId ? node.dataset.userId.length + 1 : 0;
+			const length = node.nodeType === Node.TEXT_NODE ? (node.textContent ?? '').length : node instanceof HTMLElement && (node.dataset.userId ?? node.dataset.roomId) ? (node.dataset.userId ?? node.dataset.roomId)!.length + 1 : 0;
 			if (node.nodeType === Node.TEXT_NODE && caret <= offset + length) {
 				range.setStart(node, caret - offset);
 				placed = true;
@@ -304,7 +319,7 @@
 	function collapse(final: boolean): void {
 		if (!field) return;
 		const { parts, caret } = readDraft(field);
-		const collapsed = collapseMentions(parts, people, { caret: caret ?? draftLength(parts), final, isUser });
+		const collapsed = collapseMentions(parts, people, { caret: caret ?? draftLength(parts), final, isUser, rooms: roomIds });
 		if (collapsed.changed) draw(field, collapsed.parts, caret === undefined ? undefined : collapsed.caret);
 		commit(field, collapsed.parts, collapsed.changed || draftText(collapsed.parts) !== value);
 	}
@@ -332,6 +347,10 @@
 	}
 
 	function keydown(event: KeyboardEvent): void {
+		if (event.key === 'Backspace' && !event.isComposing && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && backspaceChip()) {
+			event.preventDefault();
+			return;
+		}
 		if (completion && !event.isComposing) {
 			if (event.key === 'Escape') {
 				event.preventDefault();
@@ -357,6 +376,19 @@
 			if (event.shiftKey) document.execCommand('insertText', false, '\n');
 			else send();
 		}
+	}
+
+	/** Backspace against a chip turns it back into the text it showed, to edit; false when the caret isn't right after one. */
+	function backspaceChip(): boolean {
+		if (!field) return false;
+		const { parts, caret, anchor } = readDraft(field);
+		if (caret === undefined || (anchor !== undefined && anchor !== caret)) return false;
+		const reverted = unchip(parts, caret, (part) => mentionLabel(chipMention(part)));
+		if (!reverted) return false;
+		draw(field, reverted.parts, reverted.caret);
+		commit(field, reverted.parts, true);
+		refreshQuery();
+		return true;
 	}
 
 	/** Reads the `@`, `#`, or `:` token at the caret; anything else closes its picker. */
@@ -422,7 +454,7 @@
 	function pickRoom(room: RoomSuggestion): void {
 		if (!field || !roomFound) return;
 		const { parts } = readDraft(field);
-		const inserted = insertRoomMention(parts, roomFound.start, roomFound.end, room.id);
+		const inserted = insertMention(parts, roomFound.start, roomFound.end, room.id, true);
 		closeCompletions();
 		dismissedAutocomplete = undefined;
 		active = 0;
@@ -534,9 +566,9 @@
 	}
 </script>
 
-{#if replyPreview}
+{#if reply}
 	<div class="reply-draft" data-testid="reply-draft" role="status">
-		<span>{`Replying to ${replyPreview}`}</span>
+		<span>Replying to {#if reply.name}{reply.name}: <MentionText text={reply.text} />{:else}{reply.text}{/if}</span>
 		<button class="ap-btn ap-btn-ghost ap-btn-sm" type="button" aria-label="Cancel reply" onclick={oncancelreply}>Cancel reply</button>
 	</div>
 {/if}

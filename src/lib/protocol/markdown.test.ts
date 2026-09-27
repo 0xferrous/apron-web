@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { renderMarkdown, renderPlain, type MentionResolver } from './markdown';
+import { renderMarkdown, renderPlain, type MentionResolver, mentionSegments } from './markdown';
 
 const resolve: MentionResolver = (id) => {
 	if (id === 'alice') return { kind: 'user', id, name: 'Alice Chen' };
@@ -41,6 +41,17 @@ describe('mentions (Appendix A.3)', () => {
 		const html = renderMarkdown('#ops @ops', userResolver, roomResolver);
 		expect(html).toContain('data-room-id="ops" title="Open Ops Room">#Ops Room</button>');
 		expect(html).toContain('data-user-id="ops" title="@ops">@Ops User</span>');
+	});
+
+	it('splits text around known mentions, for reply snippets', () => {
+		const roomResolver = (id: string) => (id === 'ops' ? { kind: 'room' as const, id, title: 'Ops Room' } : undefined);
+		expect(mentionSegments('ask @ops in #ops, not #nope.', resolve, roomResolver)).toEqual([
+			'ask ',
+			{ target: { kind: 'room', id: 'ops', title: 'Ops & Co' }, hash: false },
+			' in ',
+			{ target: { kind: 'room', id: 'ops', title: 'Ops Room' }, hash: true },
+			', not #nope.'
+		]);
 	});
 
 	it('takes a second @ for system identities and drops trailing dots and dashes', () => {

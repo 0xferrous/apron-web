@@ -843,11 +843,11 @@
 		return findMessage(session.rooms, id) ?? client?.message(id);
 	}
 
-	function replyPreview(id: string): string {
+	function replyPreview(id: string): { name?: string; text: string } {
 		const target = resolveMessage(id);
-		if (!target) return 'Message unavailable';
-		if (target.deleted) return 'Message deleted';
-		return `${senderName(target)}: ${replySnippet(target)}`;
+		if (!target) return { text: 'Message unavailable' };
+		if (target.deleted) return { text: 'Message deleted' };
+		return { name: senderName(target), text: replySnippet(target) };
 	}
 
 	/** A message's reaction chips, from the timeline of the room it lives in (an intro may live in the parent). */
@@ -1284,7 +1284,7 @@
 					canCommand={snapshot.capabilities.command}
 					{people}
 					rooms={roomSuggestions}
-					replyPreview={drafts.reply ? replyPreview(drafts.reply) : undefined}
+					reply={drafts.reply ? replyPreview(drafts.reply) : undefined}
 					oninput={composerInput} onsend={sendMessage} onfiles={sendFiles} oncancelreply={cancelReply}
 					onmention={() => listMembers(MEMBERS_FRESH_MS)}
 				/>

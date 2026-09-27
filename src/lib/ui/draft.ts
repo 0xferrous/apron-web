@@ -1,15 +1,22 @@
 import type { MentionPerson } from '$lib/protocol/markdown';
 
 /**
- * A composer draft: text and mention chips. A chip shows a person's name but
- * is sent as `@user_id` (Appendix A.3), so the wire text is what a reader's
- * client resolves, whatever the person is called by then.
+ * A composer draft: text and mention chips. A chip shows a person's name, or
+ * with `room` a room's or thread's title, but is sent as `@user_id`
+ * (Appendix A.3) or `#room_id`, so the wire text is what a reader's client
+ * resolves, whatever it is called by then.
  */
-export type DraftPart = string | { id: string };
+export type DraftChip = { id: string; room?: true };
+export type DraftPart = string | DraftChip;
 
-/** The draft as sent: every chip becomes `@user_id`. */
+/** A chip as sent: `@user_id` or `#room_id`, one character longer than its ID. */
+export function chipText(chip: DraftChip): string {
+	return `${chip.room ? '#' : '@'}${chip.id}`;
+}
+
+/** The draft as sent: every chip becomes its `@user_id` or `#room_id`. */
 export function draftText(parts: DraftPart[]): string {
-	return parts.map((part) => (typeof part === 'string' ? part : `@${part.id}`)).join('');
+	return parts.map((part) => (typeof part === 'string' ? part : chipText(part))).join('');
 }
 
 /**
@@ -17,7 +24,7 @@ export function draftText(parts: DraftPart[]): string {
  * chip deleted from the text takes its mention with it.
  */
 export function draftMentions(parts: DraftPart[]): string[] {
-	return [...new Set(parts.filter((part): part is { id: string } => typeof part !== 'string').map((part) => part.id))];
+	return [...new Set(parts.filter((part): part is DraftChip => typeof part !== 'string' && !part.room).map((part) => part.id))];
 }
 
 /** Merges adjacent text and drops empty text, so equal drafts compare equal. */
@@ -38,6 +45,8 @@ export interface CollapseOptions {
 	final?: boolean;
 	/** Whether an ID names a user this client knows, beyond `people`. */
 	isUser?: (id: string) => boolean;
+	/** The rooms and threads a typed `#room_id` can name. */
+	rooms?: string[];
 }
 
 export interface Collapsed {
@@ -49,19 +58,22 @@ export interface Collapsed {
 const ID_RUN = /^[A-Za-z0-9_.-]+/;
 const WORD = /[A-Za-z0-9_]/;
 const BEFORE_MENTION = /[A-Za-z0-9]/;
+const BEFORE_ROOM = /[A-Za-z0-9_]/;
 
 /**
  * Turns a typed `@user_id` or `@name` into a chip once it is finished: an
  * exact ID (case-sensitive), or a name (case-insensitive, spaces allowed)
  * that exactly one person in `people` has, followed by a character that
  * cannot continue it. The longest match wins, an ID over a name of the same
- * length. While typing, a match the caret sits in, or whose text up to the
- * caret could still grow into someone else's longer name or ID, waits.
+ * length. A typed `#room_id` naming one of `rooms` becomes a room chip the
+ * same way. While typing, a match the caret sits in, or whose text up to the
+ * caret could still grow into a longer name or ID, waits.
  * Mentions inside code spans stay text.
  */
 export function collapseMentions(parts: DraftPart[], people: MentionPerson[], options: CollapseOptions): Collapsed {
 	const { caret, final = false } = options;
 	const isUser = (id: string) => people.some((person) => person.id === id) || (options.isUser?.(id) ?? false);
+	const rooms = options.rooms ?? [];
 	const out: DraftPart[] = [];
 	let changed = false;
 	let newCaret = caret;
@@ -87,21 +99,19 @@ export function collapseMentions(parts: DraftPart[], people: MentionPerson[], op
 				continue;
 			}
 			const before = at > 0 ? part[at - 1] : typeof previous === 'string' ? previous[previous.length - 1] : undefined;
-			if (char !== '@' || fence !== 0 || (before !== undefined && BEFORE_MENTION.test(before))) {
+			const room = char === '#';
+			if ((char !== '@' && !room) || fence !== 0 || (before !== undefined && (room ? BEFORE_ROOM : BEFORE_MENTION).test(before))) {
 				at += 1;
 				continue;
 			}
-			const hit = mentionAt(part.slice(at + 1), people, isUser, {
-				final,
-				followed,
-				caret: caret - (offset + at + 1)
-			});
+			const typing = { final, followed, caret: caret - (offset + at + 1) };
+			const hit = room ? roomAt(part.slice(at + 1), rooms, typing) : mentionAt(part.slice(at + 1), people, isUser, typing);
 			if (!hit) {
 				at += 1;
 				continue;
 			}
 			if (at > last) out.push(part.slice(last, at));
-			out.push({ id: hit.id });
+			out.push(room ? { id: hit.id, room: true } : { id: hit.id });
 			const end = at + 1 + hit.length;
 			if (caret >= offset + end) newCaret += hit.id.length - hit.length;
 			else if (caret > offset + at) newCaret = newCaret - (caret - (offset + at)) + hit.id.length + 1;
@@ -156,6 +166,22 @@ function mentionAt(
 	return winner;
 }
 
+/** The room `rest` (the text after a `#`) names, if the `#room_id` is finished; as `mentionAt`, for IDs only. */
+function roomAt(
+	rest: string,
+	rooms: string[],
+	{ final, followed, caret }: { final: boolean; followed: boolean; caret: number }
+): { id: string; length: number } | undefined {
+	const run = ID_RUN.exec(rest)?.[0].replace(/[.-]+$/, '');
+	if (!run || !rooms.includes(run)) return undefined;
+	if (final) return { id: run, length: run.length };
+	if (run.length === rest.length && !followed) return undefined;
+	if (caret >= 0 && caret <= run.length) return undefined;
+	const typed = rest.slice(0, caret);
+	if (caret > run.length && rooms.some((id) => id.length > typed.length && id.startsWith(typed))) return undefined;
+	return { id: run, length: run.length };
+}
+
 /** The `@…` being typed at the caret, for the picker: its text and where its `@` is. */
 export function mentionQuery(parts: DraftPart[], caret: number): { query: string; start: number } | undefined {
 	let offset = 0;
@@ -204,8 +230,9 @@ export function tokenAtCaret(parts: DraftPart[], caret: number, trigger: string,
 	return undefined;
 }
 
-/** Replaces the draft text from `start` to `end` with a chip for `id` and a space; the caret goes after the space. */
-export function insertMention(parts: DraftPart[], start: number, end: number, id: string): { parts: DraftPart[]; caret: number } {
+/** Replaces the draft text from `start` to `end` with a chip for `id` (a room's with `room`) and a space; the caret goes after the space. */
+export function insertMention(parts: DraftPart[], start: number, end: number, id: string, room = false): { parts: DraftPart[]; caret: number } {
+	const chip: DraftChip = room ? { id, room: true } : { id };
 	const out: DraftPart[] = [];
 	let offset = 0;
 	let placed = false;
@@ -213,14 +240,14 @@ export function insertMention(parts: DraftPart[], start: number, end: number, id
 		const length = typeof part === 'string' ? part.length : part.id.length + 1;
 		if (typeof part === 'string' && !placed && start >= offset && end <= offset + length) {
 			const after = part.slice(end - offset);
-			out.push(part.slice(0, start - offset), { id }, after.startsWith(' ') ? after : ` ${after}`);
+			out.push(part.slice(0, start - offset), chip, after.startsWith(' ') ? after : ` ${after}`);
 			placed = true;
 		} else {
 			out.push(part);
 		}
 		offset += length;
 	}
-	if (!placed) out.push({ id }, ' ');
+	if (!placed) out.push(chip, ' ');
 	return { parts: normalizeDraft(out), caret: (placed ? start : offset) + id.length + 2 };
 }
 
@@ -274,4 +301,22 @@ export function insertText(parts: DraftPart[], start: number, end: number, text:
 	}
 	if (!placed) out.push(text);
 	return { parts: normalizeDraft(out), caret: from + text.length };
+}
+
+/**
+ * Backspace right after a chip: the chip turns back into editable text, its
+ * `label` (what it showed, as `@Ada Lovelace` or `#Deploy checklist`), with
+ * the caret after it. Undefined when no chip ends at the caret.
+ */
+export function unchip(parts: DraftPart[], caret: number, label: (chip: DraftChip) => string): { parts: DraftPart[]; caret: number } | undefined {
+	let offset = 0;
+	for (const [index, part] of parts.entries()) {
+		const length = typeof part === 'string' ? part.length : part.id.length + 1;
+		offset += length;
+		if (offset < caret) continue;
+		if (offset > caret || typeof part === 'string') return undefined;
+		const text = label(part);
+		return { parts: normalizeDraft([...parts.slice(0, index), text, ...parts.slice(index + 1)]), caret: offset - length + text.length };
+	}
+	return undefined;
 }
