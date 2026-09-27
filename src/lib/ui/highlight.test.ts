@@ -3,13 +3,24 @@ import { describe, expect, it } from 'vitest';
 import { renderMarkdown } from '$lib/protocol/markdown';
 import { highlight, highlightCode, languageOf } from './highlight';
 
+/**
+ * Waits for the fenced languages in `source` to load (the same shared load the
+ * action waits on), then for the highlighting they held up to be applied,
+ * rather than for a fixed time a slow machine can overrun.
+ */
+async function settle(source: string): Promise<void> {
+	const languages = [...source.matchAll(/```(\S+)/g)].map((match) => languageOf(match[1])).filter((language) => language !== undefined);
+	await Promise.all(languages.map((language) => highlight('', language)));
+	await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 /** A rendered body in a node, with the action applied and its languages loaded. */
 async function mount(source: string): Promise<HTMLElement> {
 	const node = document.createElement('div');
 	node.innerHTML = renderMarkdown(source);
 	document.body.append(node);
 	highlightCode(node);
-	await new Promise((resolve) => setTimeout(resolve, 50));
+	await settle(source);
 	return node;
 }
 
@@ -67,11 +78,12 @@ describe('highlightCode', () => {
 
 	it('does not touch a block that changed while its language loaded', async () => {
 		const node = document.createElement('div');
-		node.innerHTML = renderMarkdown('```rust\nfn main() {}\n```');
+		const source = '```rust\nfn main() {}\n```';
+		node.innerHTML = renderMarkdown(source);
 		document.body.append(node);
 		highlightCode(node);
 		node.querySelector('code')!.textContent = 'replaced';
-		await new Promise((resolve) => setTimeout(resolve, 50));
+		await settle(source);
 		expect(node.querySelector('code')!.innerHTML).toBe('replaced');
 	});
 
@@ -79,9 +91,10 @@ describe('highlightCode', () => {
 		const node = document.createElement('div');
 		document.body.append(node);
 		const action = highlightCode(node);
-		node.innerHTML = renderMarkdown('```python\ndef f(): pass\n```');
+		const source = '```python\ndef f(): pass\n```';
+		node.innerHTML = renderMarkdown(source);
 		action.update();
-		await new Promise((resolve) => setTimeout(resolve, 50));
+		await settle(source);
 		expect(node.querySelector('.hljs-keyword')?.textContent).toBe('def');
 	});
 });
