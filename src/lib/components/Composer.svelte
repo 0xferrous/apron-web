@@ -2,6 +2,7 @@
 	import { untrack } from 'svelte';
 	import type { MentionPerson } from '$lib/protocol/markdown';
 	import { collapseMentions, draftMentions, draftText, insertMention, insertText, mentionQuery, normalizeDraft, type DraftPart } from '$lib/ui/draft';
+	import { isAutocompleteDismissed, type DismissedAutocomplete } from '$lib/ui/autocomplete-dismiss';
 	import { emojiQuery as findEmojiQuery, searchEmoji, type EmojiSuggestion } from '$lib/ui/emoji-autocomplete';
 	import { insertRoomMention, roomQuery as findRoomQuery, searchRooms, type RoomQuery, type RoomSuggestion } from '$lib/ui/room-autocomplete';
 	import type { EmojiMartData } from '@emoji-mart/data';
@@ -67,6 +68,7 @@
 	let query = $state<string | undefined>();
 	let emojiFound = $state<{ query: string; start: number; end: number } | undefined>();
 	let roomFound = $state<RoomQuery | undefined>();
+	let dismissedAutocomplete = $state<DismissedAutocomplete | undefined>();
 	let emojiData = $state.raw<EmojiMartData | undefined>();
 	let active = $state(0);
 	/** Where the `@` being completed starts, in the draft text. */
@@ -150,6 +152,7 @@
 		query = undefined;
 		emojiFound = undefined;
 		roomFound = undefined;
+		dismissedAutocomplete = undefined;
 		lastSelection = undefined;
 		dismissed = [];
 		emojiPicker.release(emojiButton);
@@ -298,15 +301,26 @@
 
 	function send(): void {
 		query = undefined;
+		dismissedAutocomplete = undefined;
 		collapse(true);
 		onsend();
+	}
+
+	function dismissAutocomplete(): void {
+		if (field) {
+			const { parts, caret } = readDraft(field);
+			dismissedAutocomplete = { text: draftText(parts), caret: caret ?? draftLength(parts) };
+		}
+		query = undefined;
+		emojiFound = undefined;
+		roomFound = undefined;
 	}
 
 	function keydown(event: KeyboardEvent): void {
 		if (emojiPickerOpen && !event.isComposing) {
 			if (event.key === 'Escape') {
 				event.preventDefault();
-				emojiFound = undefined;
+				dismissAutocomplete();
 				return;
 			}
 			if (emojiMatches.length > 0) {
@@ -326,7 +340,7 @@
 		if (roomPickerOpen && !event.isComposing) {
 			if (event.key === 'Escape') {
 				event.preventDefault();
-				roomFound = undefined;
+				dismissAutocomplete();
 				return;
 			}
 			if (roomMatches.length > 0) {
@@ -346,7 +360,7 @@
 		if (pickerOpen && !event.isComposing) {
 			if (event.key === 'Escape') {
 				event.preventDefault();
-				query = undefined;
+				dismissAutocomplete();
 				return;
 			}
 			if (matches.length > 0) {
@@ -376,9 +390,19 @@
 			query = undefined;
 			emojiFound = undefined;
 			roomFound = undefined;
+			dismissedAutocomplete = undefined;
 			return;
 		}
 		const { parts, caret } = readDraft(field);
+		const text = draftText(parts);
+		const position = caret ?? draftLength(parts);
+		if (isAutocompleteDismissed(dismissedAutocomplete, text, position)) {
+			query = undefined;
+			emojiFound = undefined;
+			roomFound = undefined;
+			return;
+		}
+		dismissedAutocomplete = undefined;
 		const foundEmoji = caret === undefined ? undefined : findEmojiQuery(parts, caret);
 		if (foundEmoji) {
 			query = undefined;
@@ -418,6 +442,7 @@
 		const end = caret ?? draftLength(parts);
 		const inserted = insertMention(parts, anchor, end, person.id);
 		query = undefined;
+		dismissedAutocomplete = undefined;
 		active = 0;
 		field.focus();
 		draw(field, inserted.parts, inserted.caret);
@@ -431,6 +456,7 @@
 		query = undefined;
 		emojiFound = undefined;
 		roomFound = undefined;
+		dismissedAutocomplete = undefined;
 		active = 0;
 		field.focus();
 		draw(field, inserted.parts, inserted.caret);
@@ -443,6 +469,7 @@
 		const inserted = insertText(parts, emojiFound.start, emojiFound.end, item.native);
 		emojiFound = undefined;
 		roomFound = undefined;
+		dismissedAutocomplete = undefined;
 		active = 0;
 		field.focus();
 		draw(field, inserted.parts, inserted.caret);
@@ -464,6 +491,7 @@
 		query = undefined;
 		emojiFound = undefined;
 		roomFound = undefined;
+		dismissedAutocomplete = undefined;
 		if (!field) return;
 		const { caret, anchor } = readDraft(field);
 		lastSelection = caret === undefined ? undefined : { start: Math.min(caret, anchor ?? caret), end: Math.max(caret, anchor ?? caret) };

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import data from '@emoji-mart/data/sets/15/native.json';
 import { emojiQuery, searchEmoji } from './emoji-autocomplete';
+import { insertText } from './draft';
 
 describe('emoji autocomplete', () => {
 	it('finds a shortcode at the caret and includes its remaining suffix for replacement', () => {
@@ -13,6 +14,17 @@ describe('emoji autocomplete', () => {
 		expect(emojiQuery(['hello:smile'], 11)).toBeUndefined();
 		expect(emojiQuery(['mail@example.com'], 12)).toBeUndefined();
 		expect(emojiQuery([{ id: 'ada' }, ':smile'], 10)).toBeUndefined();
+	});
+
+	it('keeps replacement offsets correct after a mention chip', () => {
+		const parts = [{ id: 'ada' }, ' text :smile after'];
+		const found = emojiQuery(parts, 16);
+
+		expect(found).toEqual({ query: 'smile', start: 10, end: 16 });
+		expect(insertText(parts, found!.start, found!.end, '😄')).toEqual({
+			parts: [{ id: 'ada' }, ' text 😄 after'],
+			caret: 12
+		});
 	});
 
 	it('finds emoji by shortcode and keyword, with exact matches first', () => {

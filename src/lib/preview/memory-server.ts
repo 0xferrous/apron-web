@@ -1,5 +1,5 @@
 import type { WebSocketFactory } from '$lib/protocol/client-types';
-import type { JsonObject, WireFrame } from '$lib/protocol/types';
+import { isJsonObject, type JsonObject, type WireFrame } from '$lib/protocol/types';
 
 export type PreviewRoom = {
 	room_id: string;
@@ -202,9 +202,30 @@ export class MemoryProtocolServer {
 		if (!room) return fail('Unknown room');
 		const id = typeof p.message_id === 'string' ? p.message_id : this.nextLog(room);
 		const log = this.nextLog(room);
-		const previous = room.messages.find((message) => message.message_id === id);
-		const record: JsonObject = { message_id: id, log_id: log, room_id: room.room_id, from: { ...people.preview_guest }, ...(p.body ? { body: p.body } : {}), ...(p.reply_to ? { reply_to: p.reply_to } : {}), ...(p.ext ? { ext: p.ext } : {}), ...(p.deleted ? { deleted: true } : {}) };
-		if (previous) room.messages.splice(room.messages.indexOf(previous), 1, record); else room.messages.push(record);
+		const previous = typeof p.message_id === 'string' ? this.findMessage(id) : undefined;
+		const reactions = new Map<string, string[]>();
+		if (typeof p.message_id === 'string') {
+			for (const candidate of this.rooms.values()) {
+				const existingReactions = candidate.reactions.get(id);
+				if (existingReactions) {
+					for (const [user, emojis] of existingReactions) reactions.set(user, [...emojis]);
+					candidate.reactions.delete(id);
+				}
+				for (let index = candidate.messages.length - 1; index >= 0; index--) {
+					if (candidate.messages[index].message_id === id) candidate.messages.splice(index, 1);
+				}
+			}
+		}
+		const from = previous && isJsonObject(previous.message.from) ? previous.message.from : { ...people.preview_guest };
+		const record: JsonObject = {
+			message_id: id, log_id: log, room_id: room.room_id, from,
+			...(p.body ? { body: p.body } : {}),
+			...(p.reply_to ? { reply_to: p.reply_to } : {}),
+			...(p.ext ? { ext: p.ext } : {}),
+			...(p.deleted ? { deleted: true } : {})
+		};
+		if (reactions.size) room.reactions.set(id, reactions);
+		room.messages.push(record);
 		this.broadcast({ method: 'message', params: record }, room);
 		reply({ message_id: id, log_id: log });
 	}
@@ -223,8 +244,14 @@ export class MemoryProtocolServer {
 	}
 
 	private findMessage(id: string): { room: PreviewRoom; message: JsonObject } | undefined {
-		for (const room of this.rooms.values()) { const message = room.messages.find((entry) => entry.message_id === id); if (message) return { room, message }; }
-		return undefined;
+		let found: { room: PreviewRoom; message: JsonObject } | undefined;
+		for (const room of this.rooms.values()) {
+			for (const message of room.messages) {
+				if (message.message_id !== id) continue;
+				if (!found || Number(message.log_id) >= Number(found.message.log_id)) found = { room, message };
+			}
+		}
+		return found;
 	}
 
 	private setRoom(socket: PreviewSocket, p: JsonObject, reply: (result?: JsonObject) => void, fail: (message: string) => void): void {

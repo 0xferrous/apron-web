@@ -46,4 +46,31 @@ describe('in-memory preview protocol', () => {
 		await waitFor(() => client.snapshot().rooms.some((room) => room.id === created.room_id));
 		expect(client.snapshot().rooms.find((room) => room.id === created.room_id)?.parentRoomId).toBe('general');
 	});
+
+	it('moves messages with their author and resolves reactions in the latest room', async () => {
+		const server = new MemoryProtocolServer();
+		const client = new ChatClient('ws://apron-preview.invalid', 'Preview User', server.factory);
+		clients.push(client);
+		client.start();
+		await waitFor(() => client.snapshot().authenticated && client.snapshot().rooms.some((room) => room.id === 'general' && room.loaded));
+
+		const movedId = '1710000000001';
+		await client.moveMessage(movedId, 'thread_deploy').promise;
+		await waitFor(() => client.message(movedId)?.room_id === 'thread_deploy');
+		expect(client.message(movedId)?.from.user_id).toBe('ada');
+
+		const afterMove = client.snapshot();
+		expect(timelineMessages(afterMove.rooms.find((room) => room.id === 'general')!).some((message) => message.message_id === movedId)).toBe(false);
+		expect(timelineMessages(afterMove.rooms.find((room) => room.id === 'thread_deploy')!).filter((message) => message.message_id === movedId)).toHaveLength(1);
+
+		// The seeded moved message has an older snapshot in #general. Reactions
+		// must follow its newer #thread_deploy snapshot, not the stale copy.
+		const seededId = '1710000000003';
+		await client.loadRoom('thread_deploy');
+		await client.react(seededId, ['✨']).promise;
+		await waitFor(() => Boolean(client.snapshot().rooms.find((room) => room.id === 'thread_deploy')?.timeline.reactions[seededId]?.length));
+		const afterReaction = client.snapshot();
+		expect(afterReaction.rooms.find((room) => room.id === 'thread_deploy')?.timeline.reactions[seededId]).toBeDefined();
+		expect(afterReaction.rooms.find((room) => room.id === 'general')?.timeline.reactions[seededId]).toBeUndefined();
+	});
 });

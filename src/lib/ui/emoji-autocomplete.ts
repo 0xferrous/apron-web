@@ -32,7 +32,7 @@ export function emojiQuery(parts: DraftPart[], caret: number): EmojiQuery | unde
 			const start = offset + match.index + match[0].lastIndexOf(':');
 			let end = caret;
 			while (end - offset < part.length && SHORTCODE.test(part[end - offset])) end++;
-			return { query: match[1], start, end: offset + end };
+			return { query: match[1], start, end };
 		}
 		offset += length;
 	}
