@@ -10,7 +10,7 @@ the root when Preferences picks one), and
 `src/lib/design/apron.css` is the design system's component stylesheet copied
 verbatim. The Svelte components under `src/lib/components` wrap its `ap-*`
 classes one to one with the system's React components — `ConnectScreen`,
-`Sidebar` and `ProfileBar`, `RoomHeader` and `ThreadEditor`, `ThreadCard`,
+`Sidebar`, `MemberListSidebar` and `ProfileBar`, `RoomHeader` and `ThreadEditor`, `ThreadCard`,
 `Message` with its `ReactionBar`, `Composer` with its `MentionPicker`, `SelectionBar`, `JumpBar`,
 `EmojiPopover` (the full emoji picker, which the design system leaves to the client),
 `PreferencesDialog` with its `FontFamilyField`,

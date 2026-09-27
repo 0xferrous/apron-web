@@ -14,6 +14,7 @@
 	import SelectionBar from '$lib/components/SelectionBar.svelte';
 	import Sidebar from '$lib/components/Sidebar.svelte';
 	import SidebarHandle from '$lib/components/SidebarHandle.svelte';
+	import MemberListSidebar from '$lib/components/MemberListSidebar.svelte';
 	import StatusBanner from '$lib/components/StatusBanner.svelte';
 	import ThreadCard from '$lib/components/ThreadCard.svelte';
 	import ThreadEditor from '$lib/components/ThreadEditor.svelte';
@@ -114,6 +115,7 @@
 	/** Messages a thread is being started from, for the button's "Starting…". */
 	let startingThreads = $state<Record<string, true>>({});
 	let mobilePane = $state<'rooms' | 'main'>('main');
+	let memberListOpen = $state(false);
 	let composer = $state<Composer | undefined>();
 	let messageScroll = $state<HTMLDivElement | undefined>();
 	let stickToBottom = $state(true);
@@ -357,6 +359,10 @@
 	onMount(() => {
 		passkeyUnavailable = passkeySupportError();
 		sidebar.load();
+		const memberListMedia = window.matchMedia('(min-width: 960px)');
+		memberListOpen = memberListMedia.matches;
+		const memberListMediaChange = (event: MediaQueryListEvent) => (memberListOpen = event.matches);
+		memberListMedia.addEventListener('change', memberListMediaChange);
 		serverInput = loadServerUrl() ?? defaultWebSocketUrl(window.location);
 		displayName = loadDisplayName();
 		recentServers = loadRecentServers();
@@ -378,6 +384,7 @@
 		chat.start();
 		client = chat;
 		return () => {
+			memberListMedia.removeEventListener('change', memberListMediaChange);
 			if (typingTimer) clearTimeout(typingTimer);
 			if (highlightTimer) clearTimeout(highlightTimer);
 			reveal.stop();
@@ -1073,6 +1080,7 @@
 	class="app ap-shell ap-shell-norail"
 	class:side-collapsed={sidebar.collapsed}
 	class:side-resizing={sidebar.resizing}
+	class:member-list-sidebar-closed={!memberListOpen}
 	data-pane={mobilePane}
 	style:--sidebar-w="{sidebar.collapsed ? 0 : sidebar.width}px"
 >
@@ -1098,7 +1106,8 @@
 				editDisabled={!paneReady}
 				canLeave={session.canLeaveRooms && !session.readOnly && Boolean(paneRoom?.joined)}
 				canJoin={session.canManageRooms && !session.readOnly && Boolean(paneRoom) && !paneRoom?.joined}
-				onback={() => (mobilePane = 'rooms')} onroom={backToRoom} onedit={() => (threadEditorOpen = !threadEditorOpen)} onleave={leavePane} onjoin={joinPane}
+				memberListOpen={memberListOpen}
+				onback={() => (mobilePane = 'rooms')} onroom={backToRoom} onedit={() => (threadEditorOpen = !threadEditorOpen)} onleave={leavePane} onjoin={joinPane} onmemberlist={() => (memberListOpen = !memberListOpen)}
 			/>
 			{#if threadEditorOpen && activeThreadEntry}
 				{#key activeThreadEntry.id}
@@ -1253,6 +1262,7 @@
 			</div>
 		{/if}
 	</main>
+	<MemberListSidebar {session} {activeThread} open={memberListOpen} />
 
 	{#if feedback.current}
 		<div class="toast">
@@ -1274,6 +1284,8 @@
 	:global(*), :global(*::before), :global(*::after) { box-sizing: border-box; }
 	:global(button), :global(input), :global(textarea), :global(select) { font: inherit; }
 	.app { height: 100dvh; min-height: 100%; position: relative; }
+	.app.ap-shell-norail { grid-template-columns: var(--sidebar-w) minmax(0, 1fr) 240px; }
+	.app.ap-shell-norail.member-list-sidebar-closed { grid-template-columns: var(--sidebar-w) minmax(0, 1fr); }
 	.side-collapsed :global(.ap-shell-side) { border-right: 0; visibility: hidden; }
 	.side-resizing, .side-resizing :global(*) { user-select: none; }
 	.banner { padding: var(--space-2) var(--space-4) 0; }
@@ -1294,9 +1306,13 @@
 	.toast :global(.ap-status) { box-shadow: var(--shadow-float); }
 	.toast-right { left: auto; right: var(--space-4); transform: none; }
 
+	@media (max-width: 959px) {
+		.app.ap-shell-norail { grid-template-columns: var(--sidebar-w) minmax(0, 1fr); }
+	}
 	/* Under 720px it's one pane at a time: rooms, then the room or thread, pushed like pages. */
 	@media (max-width: 719px) {
-		.app { grid-template-columns: minmax(0, 1fr); }
+		.app.ap-shell-norail { grid-template-columns: minmax(0, 1fr); }
+		.app.ap-shell-norail.member-list-sidebar-closed { grid-template-columns: minmax(0, 1fr); }
 		.app[data-pane='main'] :global(.ap-shell-side) { display: none; }
 		.app[data-pane='rooms'] .ap-shell-main { display: none; }
 		.side-collapsed :global(.ap-shell-side) { visibility: visible; }
