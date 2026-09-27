@@ -4,7 +4,7 @@
 	import { ChatClient, childRooms, defaultWebSocketUrl, findMessage, normalizeWebSocketUrl, timelineMessages, type RoomSnapshot } from '$lib/protocol/client';
 	import { serverOrigin } from '$lib/protocol/embeds';
 	import { compareLogIds } from '$lib/protocol/reducer';
-	import type { MessageRecord } from '$lib/protocol/types';
+	import type { Embed, MessageRecord } from '$lib/protocol/types';
 	import Composer from '$lib/components/Composer.svelte';
 	import ReadOnlyBar from '$lib/components/ReadOnlyBar.svelte';
 	import ConnectScreen, { type Scheme } from '$lib/components/ConnectScreen.svelte';
@@ -79,6 +79,8 @@
 	let displayName = $state('');
 	/** The `user_id`s the composer's chips mention (§3.5), sent as `body.mentions`. */
 	let composerMentions = $state<string[]>([]);
+	/** Link previews removed from the composer's draft, by URL. */
+	let composerDismissed = $state<string[]>([]);
 	let connectOpen = $state(false);
 	/** The sign-in scheme the connect screen opens with, when something asked for one. */
 	let connectScheme = $state<Scheme | undefined>();
@@ -513,7 +515,7 @@
 		const options = { ...(reply ? { replyTo: reply } : {}), ...(mentions.length ? { mentions } : {}) };
 		if (action.kind === 'message') {
 			if (!action.text.trim()) return;
-			const embeds = linkPreviews.embeds(action.text);
+			const embeds = linkPreviews.embeds(action.text, composerDismissed);
 			const post = () => feedback.track(chat.send(roomId, action.text, 'markdown', { ...options, ...(embeds.length ? { embeds } : {}) }), 'Sending…', restore);
 			const joining = joinFirst(chat, paneRoom);
 			if (joining) {
@@ -582,7 +584,7 @@
 		const command = action.kind === 'command';
 		const text = action.kind === 'message' ? action.text : drafts.text;
 		const mentions = composerMentions;
-		const embeds = command ? [] : linkPreviews.embeds(text);
+		const embeds = command ? [] : linkPreviews.embeds(text, composerDismissed);
 		const options = { ...(reply ? { replyTo: reply } : {}), ...(mentions.length ? { mentions } : {}), ...(embeds.length ? { embeds } : {}) };
 		const joining = command ? undefined : joinFirst(chat, paneRoom);
 		const { sent, uploaded } = joining
@@ -867,6 +869,13 @@
 		feedback.track(client.deleteMessage(event.message_id), 'Deleting message…');
 	}
 
+	/** The (x) on one of your embeds: saves the message without it. Hosted files go with it, so those ask first. */
+	function removeEmbed(event: MessageRecord, embed: Embed): void {
+		if (!client || !session.canEdit) return;
+		if ((embed.kind === 'upload' || embed.kind === 'stream') && !confirm('Remove this attachment? Its file will be deleted.')) return;
+		feedback.track(client.removeEmbed(event.message_id, embed), 'Removing embed…');
+	}
+
 	function removeReply(event: MessageRecord): void {
 		if (!client || !session.canEdit) return;
 		feedback.track(client.setMessageReply(event.message_id, null), 'Removing reply reference…');
@@ -1081,6 +1090,7 @@
 								oncanceledit={() => (editingId = undefined)}
 								ondelete={() => deleteMessage(event)}
 								onremovereply={() => removeReply(event)}
+								onremoveembed={(embed) => removeEmbed(event, embed)}
 								onstartthread={() => startThread(event)}
 								onreact={(emoji) => react(event, emoji)}
 								onbeginselect={() => beginSelect(event)}
@@ -1115,6 +1125,7 @@
 					bind:this={composer}
 					bind:value={drafts.text}
 					bind:mentions={composerMentions}
+					bind:dismissed={composerDismissed}
 					placeholder={activeThread ? `Reply in ${threadTitle(activeThread)}` : `Message ${activeRoom.title}`}
 					disabled={!canCompose}
 					canUpload={snapshot.capabilities['embed:upload']}

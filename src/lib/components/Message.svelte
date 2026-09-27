@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { UploadState } from '$lib/protocol/client';
 	import { renderMarkdown, renderPlain } from '$lib/protocol/markdown';
-	import type { MessageRecord } from '$lib/protocol/types';
+	import type { Embed as EmbedData, MessageRecord } from '$lib/protocol/types';
 	import { directory } from '$lib/ui/directory.svelte';
 	import { emojiAnchor, emojiPicker } from '$lib/ui/emoji-picker.svelte';
 	import { embedsOf, isSystem, replySnippet, senderName, textOf } from '$lib/ui/messages';
@@ -11,6 +11,7 @@
 	import ReactionBar from './ReactionBar.svelte';
 	import SystemNotice, { noticeScope } from './SystemNotice.svelte';
 	import Embed from './embeds/Embed.svelte';
+	import EmbedRemove from './embeds/EmbedRemove.svelte';
 
 	const LONG_PRESS_MS = 500;
 
@@ -53,6 +54,8 @@
 		oncanceledit: () => void;
 		ondelete: () => void;
 		onremovereply: () => void;
+		/** Edit the message to drop this embed. */
+		onremoveembed: (embed: EmbedData) => void;
 		onstartthread: () => void;
 		/** Toggle your reaction with this emoji. */
 		onreact: (emoji: string) => void;
@@ -63,7 +66,7 @@
 	}
 	let {
 		event, grouped, resolve, reactions, uploads, mention, pinged, highlighted, selecting, selected, editing, startingThread, caps,
-		onreply, onjump, onopenroom, onedit, onsave, oncanceledit, ondelete, onremovereply, onstartthread, onreact, onbeginselect, onselect
+		onreply, onjump, onopenroom, onedit, onsave, oncanceledit, ondelete, onremovereply, onremoveembed, onstartthread, onreact, onbeginselect, onselect
 	}: Props = $props();
 
 	let moreOpen = $state(false);
@@ -100,6 +103,13 @@
 	let replyId = $derived(event.reply_to?.message_id);
 	let replyTarget = $derived(replyId && !event.deleted ? resolve(replyId) : undefined);
 	let chips = $derived(event.deleted ? [] : reactions);
+	/**
+	 * Your own embeds can be removed, but not the last thing in a message
+	 * (§3.5: a message has text or embeds; delete it instead), nor an upload
+	 * still being written.
+	 */
+	let canRemoveEmbeds = $derived(caps.edit && !selecting && (Boolean(text.trim()) || embeds.length > 1));
+	const writing = (embed: EmbedData): boolean => Boolean(embed.embed_id && uploads[embed.embed_id] && !uploads[embed.embed_id].failed);
 	let hasActions = $derived(!selecting && (caps.reply || caps.edit || caps.removeReply || caps.react || caps.startThread));
 
 	$effect(() => {
@@ -267,7 +277,12 @@
 			{#if embeds.length > 0}
 				<div class="ap-msg-embeds">
 					{#each embeds as embed, index (embed.embed_id ?? index)}
-						<Embed {embed} upload={embed.embed_id ? uploads[embed.embed_id] : undefined} />
+						<div class="embed-slot">
+							<Embed {embed} upload={embed.embed_id ? uploads[embed.embed_id] : undefined} />
+							{#if canRemoveEmbeds && !writing(embed)}
+								<EmbedRemove label="Remove embed" onremove={() => onremoveembed(embed)} />
+							{/if}
+						</div>
 					{/each}
 				</div>
 			{/if}
@@ -327,6 +342,8 @@
 	.reply-static { cursor: default; }
 	.reply-static:hover { background: var(--bg-200); }
 	.plain { white-space: pre-wrap; }
+	/* An embed's remove button sits on its corner (EmbedRemove). */
+	.embed-slot { position: relative; max-width: 100%; }
 	.markdown :global(blockquote) {
 		margin: var(--space-2) 0;
 		padding: var(--space-1) var(--space-3);
