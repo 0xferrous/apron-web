@@ -28,9 +28,11 @@ describe('mentions (Appendix A.3)', () => {
 		expect(renderPlain('#nobody tag#ops', resolve)).toBe('#nobody tag#ops');
 		expect(renderMarkdown('`#ops`', resolve)).toBe('<p><code>#ops</code></p>\n');	});
 
-	it('leaves all-digit hashes as text, even when a room has that ID', () => {
-		const numbered = (id: string) => (id === '1' ? { kind: 'room' as const, id, title: 'One' } : undefined);
-		expect(renderPlain("we're #1, see #1.", undefined, numbered)).toBe("we're #1, see #1.");
+	it('links a thread by its all-digit ID, leaving numbers that name no room as text', () => {
+		const threads = (id: string) => (id === '1790473611343' ? { kind: 'room' as const, id, title: 'Deploy checklist' } : undefined);
+		expect(renderPlain('see #1790473611343, not #1.', undefined, threads)).toBe(
+			'see <button type="button" class="ap-mention ap-mention-room ap-mention-hash-room" data-room-id="1790473611343" title="Open Deploy checklist">#Deploy checklist</button>, not #1.'
+		);
 	});
 
 	it('resolves #room_id as a room even when @id resolves to a user', () => {

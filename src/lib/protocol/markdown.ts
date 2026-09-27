@@ -58,7 +58,7 @@ export interface MentionPerson {
 	me?: boolean;
 }
 
-/** `@user_id` or `#room_id`; trailing `.` and `-` are kept outside the ID, and an all-digit `#room_id` isn't one. */
+/** `@user_id` or `#room_id`; trailing `.` and `-` are kept outside the ID. */
 const MENTION = /@(@?[A-Za-z0-9_.-]+)|#([A-Za-z0-9_.-]+)/g;
 
 /**
@@ -213,8 +213,7 @@ function chipText(text: string, resolve?: MentionResolver, resolveRoom?: RoomMen
 		if (before !== undefined && /[A-Za-z0-9_]/.test(before)) return match;
 		if (rawRoom === undefined) return match;
 		const id = rawRoom.replace(/[.-]+$/, '');
-		// `#1` and `#1234` read as numbers and issue references, never rooms.
-		if (!id || /^\d+$/.test(id)) return match;
+		if (!id) return match;
 		const target = resolveRoom?.(id) ?? resolve?.(id);
 		return target?.kind === 'room' ? roomChip(target, '#') + rawRoom.slice(id.length) : match;
 	});
