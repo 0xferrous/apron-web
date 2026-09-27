@@ -23,6 +23,20 @@ describe('mentions (Appendix A.3)', () => {
 		expect(renderMarkdown('see @ops', resolve)).toContain('<button type="button" class="ap-mention ap-mention-room" data-room-id="ops" title="Open Ops &amp; Co">Ops &amp; Co</button>');
 	});
 
+	it('links #room IDs with a hash label, but leaves unknown or embedded hashtags alone', () => {
+		expect(renderMarkdown('see #ops.', resolve)).toContain('<button type="button" class="ap-mention ap-mention-room ap-mention-hash-room" data-room-id="ops" title="Open Ops &amp; Co">#Ops &amp; Co</button>.');
+		expect(renderPlain('#nobody tag#ops', resolve)).toBe('#nobody tag#ops');
+		expect(renderMarkdown('`#ops`', resolve)).toBe('<p><code>#ops</code></p>\n');
+	});
+
+	it('resolves #room_id as a room even when @id resolves to a user', () => {
+		const userResolver: MentionResolver = (id) => id === 'ops' ? { kind: 'user', id, name: 'Ops User' } : undefined;
+		const roomResolver = (id: string) => id === 'ops' ? { kind: 'room' as const, id, title: 'Ops Room' } : undefined;
+		const html = renderMarkdown('#ops @ops', userResolver, roomResolver);
+		expect(html).toContain('data-room-id="ops" title="Open Ops Room">#Ops Room</button>');
+		expect(html).toContain('data-user-id="ops" title="@ops">@Ops User</span>');
+	});
+
 	it('takes a second @ for system identities and drops trailing dots and dashes', () => {
 		expect(renderPlain('ask @@server-- now', resolve)).toBe('ask <span class="ap-mention" data-user-id="@server" title="@@server">@Server</span>-- now');
 	});

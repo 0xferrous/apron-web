@@ -86,8 +86,10 @@ one ending the draft collapses on send. Chips are always sent as `@user_id`, so
 the field reads by name while the wire stays ID-based, and each chip's `user_id`
 goes in `body.mentions` ([PROTOCOL.md §3.5](https://github.com/shazow/apron/blob/main/PROTOCOL.md#35-messages)): a chip deleted before sending mentions no one,
 and an edit resubmits the message's mentions. A rendered body (plain or Markdown, never inside
-code) shows a known user's mention as a chip with their current name, a room's
-as a link that opens it (or joins it), and unknown IDs as written. A fenced
+code) shows a known user's mention as a chip with their current name, a `#room_id`
+(or legacy `@room_id`) as a link that opens the room (or joins it), and unknown
+IDs as written. Typing `#` in the composer opens room autocomplete over known
+rooms and threads, searchable by title or ID; choosing one inserts its `#room_id`. A fenced
 code block that names a known language (` ```ts `, ` ```py `, ` ```diff `, …)
 is syntax-highlighted once that language's highlighter loads, fetched the first
 time a block needs it; other blocks stay plain. Only

@@ -3,6 +3,7 @@
 	import type { MentionPerson } from '$lib/protocol/markdown';
 	import { collapseMentions, draftMentions, draftText, insertMention, insertText, mentionQuery, normalizeDraft, type DraftPart } from '$lib/ui/draft';
 	import { emojiQuery as findEmojiQuery, searchEmoji, type EmojiSuggestion } from '$lib/ui/emoji-autocomplete';
+	import { insertRoomMention, roomQuery as findRoomQuery, searchRooms, type RoomQuery, type RoomSuggestion } from '$lib/ui/room-autocomplete';
 	import type { EmojiMartData } from '@emoji-mart/data';
 	import { emojiAnchor, emojiPicker, loadEmojiData } from '$lib/ui/emoji-picker.svelte';
 	import { isCommand } from '$lib/ui/commands';
@@ -44,6 +45,8 @@
 		canCommand?: boolean;
 		/** Who an `@` can name: the room's members, else its recent senders. */
 		people: MentionPerson[];
+		/** Rooms and threads available for `#room` mentions. */
+		rooms?: RoomSuggestion[];
 		/** "Dana: text" for the message being replied to, when there is one. */
 		replyPreview?: string;
 		oninput: () => void;
@@ -54,7 +57,7 @@
 		/** The mention picker opened: a moment to refresh who can be named. */
 		onmention?: () => void;
 	}
-	let { value = $bindable(), mentions = $bindable([]), dismissed = $bindable([]), placeholder, disabled, sendDisabled = false, canUpload, canCommand = false, people, replyPreview, oninput, onsend, onfiles, oncancelreply, onmention }: Props = $props();
+	let { value = $bindable(), mentions = $bindable([]), dismissed = $bindable([]), placeholder, disabled, sendDisabled = false, canUpload, canCommand = false, people, rooms = [], replyPreview, oninput, onsend, onfiles, oncancelreply, onmention }: Props = $props();
 
 	let field = $state<HTMLDivElement | undefined>();
 	let attachInput = $state<HTMLInputElement | undefined>();
@@ -64,6 +67,7 @@
 	/** The text after `@` at the caret, or undefined when the picker is closed. */
 	let query = $state<string | undefined>();
 	let emojiFound = $state<{ query: string; start: number; end: number } | undefined>();
+	let roomFound = $state<RoomQuery | undefined>();
 	let emojiData = $state.raw<EmojiMartData | undefined>();
 	let active = $state(0);
 	/** Where the `@` being completed starts, in the draft text. */
@@ -79,8 +83,10 @@
 	let canRecord = $derived(canUpload && typeof MediaRecorder !== 'undefined' && Boolean(navigator.mediaDevices?.getUserMedia));
 	let matches = $derived(query === undefined ? [] : matching(query));
 	let emojiMatches = $derived(emojiFound && emojiData ? searchEmoji(emojiData, emojiFound.query) : []);
+	let roomMatches = $derived(roomFound ? searchRooms(rooms, roomFound.query) : []);
 	let pickerOpen = $derived(query !== undefined && !disabled);
 	let emojiPickerOpen = $derived(emojiFound !== undefined && !disabled);
+	let roomPickerOpen = $derived(roomFound !== undefined && !disabled);
 
 	let activeIndex = $derived(Math.min(active, Math.max(0, matches.length - 1)));
 	let empty = $state(true);
@@ -144,6 +150,7 @@
 	export function reset(): void {
 		query = undefined;
 		emojiFound = undefined;
+		roomFound = undefined;
 		lastSelection = undefined;
 		dismissed = [];
 		emojiPicker.release(emojiButton);
@@ -318,6 +325,26 @@
 				}
 			}
 		}
+		if (roomPickerOpen && !event.isComposing) {
+			if (event.key === 'Escape') {
+				event.preventDefault();
+				roomFound = undefined;
+				return;
+			}
+			if (roomMatches.length > 0) {
+				if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+					event.preventDefault();
+					const step = event.key === 'ArrowDown' ? 1 : roomMatches.length - 1;
+					active = (active + step) % roomMatches.length;
+					return;
+				}
+				if (event.key === 'Tab' || (event.key === 'Enter' && !event.shiftKey)) {
+					event.preventDefault();
+					pickRoom(roomMatches[Math.min(active, roomMatches.length - 1)]);
+					return;
+				}
+			}
+		}
 		if (pickerOpen && !event.isComposing) {
 			if (event.key === 'Escape') {
 				event.preventDefault();
@@ -345,11 +372,12 @@
 		}
 	}
 
-	/** Reads the `@…` the caret sits in; anything else closes the picker. */
+	/** Reads the `@`, `#`, or `:` token at the caret; anything else closes its picker. */
 	function refreshQuery(): void {
 		if (!field || disabled || document.activeElement !== field) {
 			query = undefined;
 			emojiFound = undefined;
+			roomFound = undefined;
 			return;
 		}
 		const { parts, caret } = readDraft(field);
@@ -357,11 +385,20 @@
 		if (foundEmoji) {
 			query = undefined;
 			if (emojiFound === undefined || emojiFound.start !== foundEmoji.start) active = 0;
+			roomFound = undefined;
 			emojiFound = foundEmoji;
 			void loadEmojiData().then((data) => { emojiData = data; }).catch(() => { emojiFound = undefined; });
 			return;
 		}
 		emojiFound = undefined;
+		const foundRoom = caret === undefined ? undefined : findRoomQuery(parts, caret);
+		if (foundRoom) {
+			query = undefined;
+			if (roomFound === undefined || roomFound.start !== foundRoom.start) active = 0;
+			roomFound = foundRoom;
+			return;
+		}
+		roomFound = undefined;
 		const found = caret === undefined ? undefined : mentionQuery(parts, caret);
 		// A query with a space stays open only while it still names someone.
 		if (!found || (/\s/.test(found.query) && matching(found.query).length === 0)) {
@@ -389,11 +426,25 @@
 		commit(field, inserted.parts, true);
 	}
 
+	function pickRoom(room: RoomSuggestion): void {
+		if (!field || !roomFound) return;
+		const { parts } = readDraft(field);
+		const inserted = insertRoomMention(parts, roomFound.start, roomFound.end, room.id);
+		query = undefined;
+		emojiFound = undefined;
+		roomFound = undefined;
+		active = 0;
+		field.focus();
+		draw(field, inserted.parts, inserted.caret);
+		commit(field, inserted.parts, true);
+	}
+
 	function pickEmoji(item: EmojiSuggestion): void {
 		if (!field || !emojiFound) return;
 		const { parts } = readDraft(field);
 		const inserted = insertText(parts, emojiFound.start, emojiFound.end, item.native);
 		emojiFound = undefined;
+		roomFound = undefined;
 		active = 0;
 		field.focus();
 		draw(field, inserted.parts, inserted.caret);
@@ -414,6 +465,7 @@
 	function blur(): void {
 		query = undefined;
 		emojiFound = undefined;
+		roomFound = undefined;
 		if (!field) return;
 		const { caret, anchor } = readDraft(field);
 		lastSelection = caret === undefined ? undefined : { start: Math.min(caret, anchor ?? caret), end: Math.max(caret, anchor ?? caret) };
@@ -530,6 +582,22 @@
 				{/if}
 			{/snippet}
 		</AutocompletePicker>
+	{:else if roomPickerOpen}
+		<AutocompletePicker
+			items={roomMatches}
+			active={Math.min(active, Math.max(0, roomMatches.length - 1))}
+			label="Room suggestions"
+			testid="room-autocomplete"
+			emptyText={`No room matches “${roomFound?.query ?? ''}”`}
+			getKey={(room) => room.id}
+			onpick={pickRoom}
+			onhover={(index) => (active = index)}
+		>
+			{#snippet row(room)}
+				<span class="ap-mpick-name">{room.title}</span>
+				<span class="ap-mpick-id">#{room.id}</span>
+			{/snippet}
+		</AutocompletePicker>
 	{:else if emojiPickerOpen && emojiMatches}
 		<AutocompletePicker
 			items={emojiMatches}
@@ -617,7 +685,7 @@
 </div>
 
 <style>
-	/* The mention picker anchors to the composer and grows upward. */
+	/* The autocomplete picker anchors to the composer and grows upward. */
 	.wrap { position: relative; }
 	.reply-draft { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: var(--space-2) var(--space-4); font-size: 13px; line-height: 18px; color: var(--ink-muted); }
 	/* Previews of the draft's links, above the field; each can be removed before sending. */
