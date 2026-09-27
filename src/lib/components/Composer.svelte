@@ -7,7 +7,7 @@
 	import type { MentionPerson } from '$lib/protocol/markdown';
 	import { collapseMentions, draftMentions, draftText, insertMention, insertText, mentionQuery, normalizeDraft, type DraftPart } from '$lib/ui/draft';
 	import { isAutocompleteDismissed, type DismissedAutocomplete } from '$lib/ui/autocomplete-dismiss';
-	import { emojiQuery as findEmojiQuery, searchEmoji, type EmojiSuggestion } from '$lib/ui/emoji-autocomplete';
+	import { emojiQuery as findEmojiQuery, searchEmoji, type EmojiQuery, type EmojiSuggestion } from '$lib/ui/emoji-autocomplete';
 	import { insertRoomMention, roomQuery as findRoomQuery, searchRooms, type RoomQuery, type RoomSuggestion } from '$lib/ui/room-autocomplete';
 	import type { EmojiMartData } from '@emoji-mart/data';
 	import { emojiAnchor, emojiPicker, loadEmojiData } from '$lib/ui/emoji-picker.svelte';
@@ -70,7 +70,8 @@
 	let lastSelection: { start: number; end: number } | undefined;
 	/** The text after `@` at the caret, or undefined when the picker is closed. */
 	let query = $state<string | undefined>();
-	let emojiFound = $state<{ query: string; start: number; end: number } | undefined>();
+	/** The `:shortcode` or `#room` at the caret, while its picker is open. */
+	let emojiFound = $state<EmojiQuery | undefined>();
 	let roomFound = $state<RoomQuery | undefined>();
 	let dismissedAutocomplete = $state<DismissedAutocomplete | undefined>();
 	let emojiData = $state.raw<EmojiMartData | undefined>();
@@ -90,10 +91,17 @@
 	let emojiMatches = $derived(emojiFound && emojiData ? searchEmoji(emojiData, emojiFound.query) : []);
 	let roomMatches = $derived(roomFound ? searchRooms(rooms, roomFound.query) : []);
 	let pickerOpen = $derived(query !== undefined && !disabled);
-	let emojiPickerOpen = $derived(emojiFound !== undefined && !disabled);
 	let roomPickerOpen = $derived(roomFound !== undefined && !disabled);
-
-	let activeIndex = $derived(Math.min(active, Math.max(0, matches.length - 1)));
+	/** Opens once the emoji data has loaded, rather than showing "no match" meanwhile. */
+	let emojiPickerOpen = $derived(emojiFound !== undefined && emojiData !== undefined && !disabled);
+	/** The open picker (at most one is): how many suggestions it has, and how to take one. */
+	let completion = $derived.by((): { count: number; take: (index: number) => void } | undefined => {
+		if (pickerOpen) return { count: matches.length, take: (index) => pick(matches[index]) };
+		if (roomPickerOpen) return { count: roomMatches.length, take: (index) => pickRoom(roomMatches[index]) };
+		if (emojiPickerOpen) return { count: emojiMatches.length, take: (index) => pickEmoji(emojiMatches[index]) };
+		return undefined;
+	});
+	let activeIndex = $derived(Math.min(active, Math.max(0, (completion?.count ?? 0) - 1)));
 	let empty = $state(true);
 	let command = $derived(canCommand && isCommand(value));
 	let emojiOpen = $derived(emojiPicker.isOpenFor(emojiButton));
@@ -153,9 +161,7 @@
 
 	/** Closes the picker and stops any recording without sending: the pane is changing under it. */
 	export function reset(): void {
-		query = undefined;
-		emojiFound = undefined;
-		roomFound = undefined;
+		closeCompletions();
 		dismissedAutocomplete = undefined;
 		lastSelection = undefined;
 		dismissed = [];
@@ -303,8 +309,15 @@
 		commit(field, collapsed.parts, collapsed.changed || draftText(collapsed.parts) !== value);
 	}
 
-	function send(): void {
+	/** Closes whichever picker is open. */
+	function closeCompletions(): void {
 		query = undefined;
+		emojiFound = undefined;
+		roomFound = undefined;
+	}
+
+	function send(): void {
+		closeCompletions();
 		dismissedAutocomplete = undefined;
 		collapse(true);
 		onsend();
@@ -315,68 +328,26 @@
 			const { parts, caret } = readDraft(field);
 			dismissedAutocomplete = { text: draftText(parts), caret: caret ?? draftLength(parts) };
 		}
-		query = undefined;
-		emojiFound = undefined;
-		roomFound = undefined;
+		closeCompletions();
 	}
 
 	function keydown(event: KeyboardEvent): void {
-		if (emojiPickerOpen && !event.isComposing) {
+		if (completion && !event.isComposing) {
 			if (event.key === 'Escape') {
 				event.preventDefault();
 				dismissAutocomplete();
 				return;
 			}
-			if (emojiMatches.length > 0) {
+			if (completion.count > 0) {
 				if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
 					event.preventDefault();
-					const step = event.key === 'ArrowDown' ? 1 : emojiMatches.length - 1;
-					active = (active + step) % emojiMatches.length;
+					const step = event.key === 'ArrowDown' ? 1 : completion.count - 1;
+					active = (activeIndex + step) % completion.count;
 					return;
 				}
 				if (event.key === 'Tab' || (event.key === 'Enter' && !event.shiftKey)) {
 					event.preventDefault();
-					pickEmoji(emojiMatches[active]);
-					return;
-				}
-			}
-		}
-		if (roomPickerOpen && !event.isComposing) {
-			if (event.key === 'Escape') {
-				event.preventDefault();
-				dismissAutocomplete();
-				return;
-			}
-			if (roomMatches.length > 0) {
-				if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-					event.preventDefault();
-					const step = event.key === 'ArrowDown' ? 1 : roomMatches.length - 1;
-					active = (active + step) % roomMatches.length;
-					return;
-				}
-				if (event.key === 'Tab' || (event.key === 'Enter' && !event.shiftKey)) {
-					event.preventDefault();
-					pickRoom(roomMatches[Math.min(active, roomMatches.length - 1)]);
-					return;
-				}
-			}
-		}
-		if (pickerOpen && !event.isComposing) {
-			if (event.key === 'Escape') {
-				event.preventDefault();
-				dismissAutocomplete();
-				return;
-			}
-			if (matches.length > 0) {
-				if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-					event.preventDefault();
-					const step = event.key === 'ArrowDown' ? 1 : matches.length - 1;
-					active = (activeIndex + step) % matches.length;
-					return;
-				}
-				if (event.key === 'Tab' || (event.key === 'Enter' && !event.shiftKey)) {
-					event.preventDefault();
-					pick(matches[activeIndex]);
+					completion.take(activeIndex);
 					return;
 				}
 			}
@@ -391,9 +362,7 @@
 	/** Reads the `@`, `#`, or `:` token at the caret; anything else closes its picker. */
 	function refreshQuery(): void {
 		if (!field || disabled || document.activeElement !== field) {
-			query = undefined;
-			emojiFound = undefined;
-			roomFound = undefined;
+			closeCompletions();
 			dismissedAutocomplete = undefined;
 			return;
 		}
@@ -401,17 +370,14 @@
 		const text = draftText(parts);
 		const position = caret ?? draftLength(parts);
 		if (isAutocompleteDismissed(dismissedAutocomplete, text, position)) {
-			query = undefined;
-			emojiFound = undefined;
-			roomFound = undefined;
+			closeCompletions();
 			return;
 		}
 		dismissedAutocomplete = undefined;
 		const foundEmoji = caret === undefined ? undefined : findEmojiQuery(parts, caret);
 		if (foundEmoji) {
-			query = undefined;
-			if (emojiFound === undefined || emojiFound.start !== foundEmoji.start) active = 0;
-			roomFound = undefined;
+			if (emojiFound?.start !== foundEmoji.start) active = 0;
+			closeCompletions();
 			emojiFound = foundEmoji;
 			void loadEmojiData().then((data) => { emojiData = data; }).catch(() => { emojiFound = undefined; });
 			return;
@@ -419,8 +385,8 @@
 		emojiFound = undefined;
 		const foundRoom = caret === undefined ? undefined : findRoomQuery(parts, caret);
 		if (foundRoom) {
-			query = undefined;
-			if (roomFound === undefined || roomFound.start !== foundRoom.start) active = 0;
+			if (roomFound?.start !== foundRoom.start) active = 0;
+			closeCompletions();
 			roomFound = foundRoom;
 			return;
 		}
@@ -445,7 +411,7 @@
 		const { parts, caret } = readDraft(field);
 		const end = caret ?? draftLength(parts);
 		const inserted = insertMention(parts, anchor, end, person.id);
-		query = undefined;
+		closeCompletions();
 		dismissedAutocomplete = undefined;
 		active = 0;
 		field.focus();
@@ -457,9 +423,7 @@
 		if (!field || !roomFound) return;
 		const { parts } = readDraft(field);
 		const inserted = insertRoomMention(parts, roomFound.start, roomFound.end, room.id);
-		query = undefined;
-		emojiFound = undefined;
-		roomFound = undefined;
+		closeCompletions();
 		dismissedAutocomplete = undefined;
 		active = 0;
 		field.focus();
@@ -471,8 +435,7 @@
 		if (!field || !emojiFound) return;
 		const { parts } = readDraft(field);
 		const inserted = insertText(parts, emojiFound.start, emojiFound.end, item.native);
-		emojiFound = undefined;
-		roomFound = undefined;
+		closeCompletions();
 		dismissedAutocomplete = undefined;
 		active = 0;
 		field.focus();
@@ -492,9 +455,7 @@
 
 	/** Leaving the field (for the emoji button, say) remembers the selection, since the picker takes focus. */
 	function blur(): void {
-		query = undefined;
-		emojiFound = undefined;
-		roomFound = undefined;
+		closeCompletions();
 		dismissedAutocomplete = undefined;
 		if (!field) return;
 		const { caret, anchor } = readDraft(field);
@@ -615,7 +576,7 @@
 	{:else if roomPickerOpen}
 		<AutocompletePicker
 			items={roomMatches}
-			active={Math.min(active, Math.max(0, roomMatches.length - 1))}
+			active={activeIndex}
 			label="Room suggestions"
 			testid="room-autocomplete"
 			emptyText={`No room matches “${roomFound?.query ?? ''}”`}
@@ -628,10 +589,10 @@
 				<span class="ap-mpick-id">#{room.id}</span>
 			{/snippet}
 		</AutocompletePicker>
-	{:else if emojiPickerOpen && emojiMatches}
+	{:else if emojiPickerOpen}
 		<AutocompletePicker
 			items={emojiMatches}
-			active={Math.min(active, Math.max(0, emojiMatches.length - 1))}
+			active={activeIndex}
 			label="Emoji suggestions"
 			testid="emoji-autocomplete"
 			emptyText={`No emoji match “${emojiFound?.query ?? ''}”`}
