@@ -26,6 +26,18 @@ demo Worker from
 [apron-chat/apron-server-cloudflare](https://github.com/apron-chat/apron-server-cloudflare)
 (`npx wrangler dev --port 8080`).
 
+The server the client opens first is `VITE_DEFAULT_SERVER_URL` from the build
+(the connect screen switches to any other, and remembers it):
+
+- `npm run dev` leaves it unset, so it uses same-origin `/ws`, proxied to
+  port 8080. To start dev against another server, set it in `.env.local`.
+- Builds (`npm run build`, production, and Previews) read `.env.production`:
+  `wss://server.apron.chat/`, the reference server for testing and demos. To
+  build for another server, set it in `.env.production.local` (`.env.local`
+  doesn't override `.env.production`) or on the command line, e.g.
+  `VITE_DEFAULT_SERVER_URL=wss://chat.example/ npm run build`. Set it empty for
+  same-origin `/ws`.
+
 The unit tests replay the implementation-agnostic protocol fixtures in
 [shazow/apron](https://github.com/shazow/apron), checked out as the `protocol`
 submodule and pinned to a commit. Dependabot opens a pull request when it
@@ -43,14 +55,15 @@ in `static/` and `src/lib/assets/favicon.svg`.
 
 [Cloudflare Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/)
 is connected to this repository in the Cloudflare dashboard. A push to `main` (a
-merged pull request) builds with `wss://server.apron.chat/` as the default server
-and deploys `build/` to `https://web.apron.chat` with `wrangler.toml`. Every
-other branch gets a [Preview](https://developers.cloudflare.com/workers/previews/)
-at `https://<branch>-apron-web.shazow.workers.dev`, and Cloudflare comments its
-URL on the pull request. The build command is:
+merged pull request) deploys `build/` to `https://web.apron.chat` with
+`wrangler.toml`. Every other branch gets a
+[Preview](https://developers.cloudflare.com/workers/previews/) at
+`https://<branch>-apron-web.shazow.workers.dev`, and Cloudflare comments its URL
+on the pull request. Both build with `wss://server.apron.chat/` as the default
+server, from `.env.production`. The build command is:
 
 ```sh
-git submodule update --init && VITE_DEFAULT_SERVER_URL=wss://server.apron.chat/ npm run build
+git submodule update --init && npm run build
 ```
 
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs `npm run check`,
@@ -59,7 +72,7 @@ protection on `main` requires its `test` check, so only tested changes reach
 the production build. To deploy by hand, with Wrangler on `PATH`:
 
 ```sh
-VITE_DEFAULT_SERVER_URL=wss://server.apron.chat/ npm run build
+npm run build
 wrangler deploy
 ```
 

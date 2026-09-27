@@ -3,9 +3,10 @@
 What the web client does, feature by feature, and which protocol capabilities
 each needs. [architecture.md](architecture.md) covers how the code is laid out.
 
-The default connection is same-origin `/ws` in a browser unless
-`VITE_DEFAULT_SERVER_URL` is set at build time.
-Local development and ordinary builds retain the same-origin default.
+The default connection is `VITE_DEFAULT_SERVER_URL` from the build, which
+`.env.production` sets to `wss://server.apron.chat/` for every production build
+(web.apron.chat and pull request Previews). Local development, and a build with
+`VITE_DEFAULT_SERVER_URL=` (empty), use same-origin `/ws` instead.
 After a failed WebSocket handshake, the client makes a bounded HTTP diagnostic
 request to the same URL with `?apron_connection_status=1`. Supporting servers
 can expose a capacity error and `Retry-After` through CORS; the client displays
@@ -95,6 +96,21 @@ row with a rust rule, pulses once as it arrives or when an edit adds you (never
 on replayed history), raises an `@` badge on a room you aren't reading, and,
 when it lands above the fold, turns the jump bar rust with **Jump to mention**.
 Text that merely contains your `@user_id` does none of that.
+
+A mention that lands while the tab is hidden or unfocused flashes the tab title
+and plays a soft chime. **Preferences** (the gear beside your profile) can turn
+on desktop notifications instead, for mentions or for every message from
+someone else; turning them on asks the browser's permission, and **Send test**
+shows a sample. While they're on, a notification replaces the chime (the chime
+still plays if one couldn't be shown), each room keeps one notification that
+the next message replaces (its newest mention, else its newest message), and
+clicking it opens that room or thread. Where the page can't show notifications
+itself (Android Chrome) the service worker shows them. Permission revoked in the
+browser's site settings reads as off. **Appearance** picks a light or dark theme
+over the system's, and an installed font for the interface, messages and code
+(suggested from installed fonts where the browser allows listing them); the
+font choice is marked experimental, to be replaced by a choice of themes. All
+of these stay on this device; settings aren't synced.
 
 With the `command` cap, composer text that starts with one `/` is a command
 ([PROTOCOL.md §4.8](https://github.com/shazow/apron/blob/main/PROTOCOL.md#48-command)): the composer shows a **Command** tag, sets the line in

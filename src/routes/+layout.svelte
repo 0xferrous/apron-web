@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
+	import { appearanceSettings } from '$lib/ui/appearance.svelte';
 	import '$lib/design/tokens.css';
 	import '$lib/design/apron.css';
 	import favicon from '$lib/assets/favicon.svg';
@@ -6,6 +8,8 @@
 	import UpdateNotice from '$lib/components/UpdateNotice.svelte';
 
 	let { children } = $props();
+
+	onMount(() => appearanceSettings.load());
 </script>
 
 <svelte:head>

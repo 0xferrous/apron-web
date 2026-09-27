@@ -5,7 +5,9 @@
 	import { directory } from '$lib/ui/directory.svelte';
 	import type { SessionView } from '$lib/ui/session.svelte';
 	import { saveDisplayName } from '$lib/ui/storage';
+	import type { NotificationPermissionState, NotificationScope, NotificationTestResult } from '$lib/ui/notifications';
 	import Avatar from './Avatar.svelte';
+	import PreferencesDialog from './PreferencesDialog.svelte';
 	import TypingDots from './TypingDots.svelte';
 
 	type Status = 'idle' | 'saving' | 'altered' | 'declined';
@@ -16,14 +18,23 @@
 		backendLabel: string;
 		displayName: string;
 		passkeyUnavailable?: string;
+		notificationsEnabled: boolean;
+		notificationsSupported: boolean;
+		notificationPermission: NotificationPermissionState;
+		notificationScope: NotificationScope;
+		onnotifications: () => void;
+		onnotificationscope: (scope: NotificationScope) => void;
+		ontestnotifications: () => Promise<NotificationTestResult>;
 		/** Signing out starts a different session: the page drops what it held from this one. */
 		onsignout: () => void;
 		/** Sign-in lives on the connect screen; this opens it with the handle typed here. */
 		onsignin: (name?: string) => void;
 	}
-	let { client, session, backendLabel, displayName = $bindable(), passkeyUnavailable, onsignout, onsignin }: Props = $props();
+	let { client, session, backendLabel, displayName = $bindable(), passkeyUnavailable, notificationsEnabled, notificationsSupported, notificationPermission, notificationScope, onnotifications, onnotificationscope, ontestnotifications, onsignout, onsignin }: Props = $props();
 
 	let open = $state(false);
+	let preferencesOpen = $state(false);
+	let preferencesTrigger = $state<HTMLButtonElement | undefined>();
 	let draft = $state('');
 	let status = $state<Status>('idle');
 	let serverName = $state('');
@@ -90,6 +101,11 @@
 	function close(): void {
 		open = false;
 		status = 'idle';
+	}
+
+	function showPreferences(): void {
+		open = false;
+		preferencesOpen = true;
 	}
 
 	/** A handle the user typed in the editor, as opposed to the one it opened with. */
@@ -250,6 +266,12 @@
 			</form>
 		</div>
 	{/if}
+	<PreferencesDialog
+		bind:open={preferencesOpen}
+		{notificationsEnabled} {notificationsSupported} {notificationPermission} {notificationScope}
+		{onnotifications} {onnotificationscope} {ontestnotifications}
+		onclosed={() => preferencesTrigger?.focus()}
+	/>
 	<button class="ap-profile-me" class:ap-profile-open={open} type="button" aria-haspopup="dialog" aria-expanded={open} aria-label={`Your profile on ${backendLabel}: ${you?.name || you?.user_id || 'not signed in'}. Edit`} onclick={toggle}>
 		<Avatar name={you?.name || you?.user_id || '?'} id={you?.user_id} src={avatar} />
 		<span class="ap-profile-text">
@@ -258,9 +280,18 @@
 		</span>
 		<span class="ap-profile-edit" aria-hidden="true">Edit</span>
 	</button>
+	<button class="ap-profile-settings" bind:this={preferencesTrigger} type="button" aria-label="Open preferences" aria-haspopup="dialog" title="Preferences" onclick={showPreferences}>
+		<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"/><path d="m19.4 15 .1.1-1.6 2.7-.2-.1a1.7 1.7 0 0 0-1.8.1 1.7 1.7 0 0 0-.9 1.5v.2h-3.2v-.2a1.7 1.7 0 0 0-2.7-1.4l-.2.1-1.6-2.7.1-.1a1.7 1.7 0 0 0 0-3l-.1-.1 1.6-2.7.2.1a1.7 1.7 0 0 0 2.7-1.4v-.2h3.2v.2a1.7 1.7 0 0 0 2.7 1.4l.2-.1 1.6 2.7-.1.1a1.7 1.7 0 0 0 0 3Z"/></svg>
+	</button>
 </div>
 
 <style>
+	.ap-profile { display: flex; align-items: center; gap: var(--space-1); }
+	.ap-profile-me { flex: 1; min-width: 0; width: auto; }
+	.ap-profile-settings { flex: none; width: 32px; height: 32px; display: grid; place-items: center; padding: 0; color: var(--ink-muted); background: transparent; border: 0; border-radius: var(--radius-md); cursor: pointer; }
+	.ap-profile-settings:hover { color: var(--ink); background: var(--bg-300); }
+	.ap-profile-settings:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+	.ap-profile-settings svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 	.ap-profile-pop { max-height: calc(100dvh - 96px); overflow-y: auto; }
 	.ap-profile-pop .ap-profedit-actions { flex-wrap: wrap; }
 	.signin-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
