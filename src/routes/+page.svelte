@@ -110,7 +110,7 @@
 	let activeThread = $state<string | undefined>();
 	let selectedRoomId = $state<string | undefined>();
 	let pendingOpen = $state<PendingOpen | undefined>();
-	/** A room or thread joined from the directory, opened once its `room_update` has arrived. */
+	/** A room or thread joined from the directory or just created, opened once its `room_update` has arrived. */
 	let pendingJoin = $state<string | undefined>();
 	/**
 	 * Where the New divider sits in the open pane: after your read cursor as it
@@ -249,7 +249,7 @@
 		untrack(() => listMembers(MEMBERS_RETRY_MS));
 	});
 
-	// A room joined from the directory opens once its `room_update` has arrived.
+	// A room joined from the directory, or created from the sidebar, opens once its `room_update` has arrived.
 	$effect(() => {
 		const joined = pendingJoin;
 		const room = joined ? session.rooms.find((candidate) => candidate.id === joined) : undefined;
@@ -447,6 +447,7 @@
 		selectedRoomId = undefined;
 		activeThread = undefined;
 		pendingOpen = undefined;
+		pendingJoin = undefined;
 		startingThreads = {};
 		threadEditorOpen = false;
 		selection.cancel();
@@ -1120,7 +1121,7 @@
 		{client} {session} {backendLabel} threads={listedThreads} {activeThread} mentions={mentions.byRoom} unread={unread.byRoom} bind:displayName {passkeyUnavailable}
 		notificationsEnabled={notificationsActive} notificationsSupported={notificationState !== 'unsupported'} notificationPermission={notificationState} notificationScope={notificationScope} onnotifications={toggleNotifications} onnotificationscope={updateNotificationScope} ontestnotifications={testNotifications}
 		onconnect={() => openConnect()} onsignin={(name) => openConnect({ passkey: true, name })}
-		onroom={chooseRoom} onthread={chooseThread} onjoin={joinRoom} onsignout={() => session.forget()}
+		onroom={chooseRoom} onthread={chooseThread} onjoin={joinRoom} oncreateroom={(roomId) => (pendingJoin = roomId)} onsignout={() => session.forget()}
 	/>
 	<SidebarHandle layout={sidebar} />
 

@@ -1,9 +1,11 @@
 <script lang="ts">
+	import Plus from '@lucide/svelte/icons/plus';
 	import { untrack } from 'svelte';
 	import type { ChatClient, RoomSnapshot } from '$lib/protocol/client';
 	import type { SessionView } from '$lib/ui/session.svelte';
 	import type { NotificationPermissionState, NotificationScope, NotificationTestResult } from '$lib/ui/notifications';
 	import { sidebarRooms, type ThreadEntry } from '$lib/ui/timeline';
+	import CreateRoomDialog from './CreateRoomDialog.svelte';
 	import ProfileBar from './ProfileBar.svelte';
 
 	interface Props {
@@ -31,11 +33,13 @@
 		onthread: (thread: string) => void;
 		/** Join a visible room or thread from `room_list` (cap `rooms`); it opens once its `room_update` arrives. */
 		onjoin: (roomId: string) => void;
+		/** A room created here; it opens once its `room_update` arrives. */
+		oncreateroom: (roomId: string) => void;
 		onsignout: () => void;
 		/** Opens the connect screen to sign in with a passkey, carrying a handle typed in the profile. */
 		onsignin: (name?: string) => void;
 	}
-	let { client, session, backendLabel, threads, activeThread, mentions, unread, displayName = $bindable(), passkeyUnavailable, notificationsEnabled, notificationsSupported, notificationPermission, notificationScope, onnotifications, onnotificationscope, ontestnotifications, onconnect, onroom, onthread, onjoin, onsignout, onsignin }: Props = $props();
+	let { client, session, backendLabel, threads, activeThread, mentions, unread, displayName = $bindable(), passkeyUnavailable, notificationsEnabled, notificationsSupported, notificationPermission, notificationScope, onnotifications, onnotificationscope, ontestnotifications, onconnect, onroom, onthread, onjoin, oncreateroom, onsignout, onsignin }: Props = $props();
 	/** Threads are listed under their parent, not as rooms of their own. */
 	let rooms = $derived(sidebarRooms(session.rooms));
 	let canBrowse = $derived(session.canManageRooms && session.ready);
@@ -45,12 +49,6 @@
 	let moreThreadsFor = $state<string | undefined>();
 	let listError = $state('');
 	let createOpen = $state(false);
-	let createTitle = $state('');
-	let creatingRoom = $state(false);
-	let createError = $state('');
-	let createDialog = $state<HTMLDialogElement | undefined>();
-	let createTitleInput = $state<HTMLInputElement | undefined>();
-	let pendingCreatedRoom = $state<string | undefined>();
 	let canCreateRoom = $derived(session.canManageRooms && session.ready && !session.readOnly);
 	/** Visible rooms this user hasn't joined (or has left), from the latest `room_list`. */
 	let unjoined = $derived((session.snapshot.directory ?? []).filter((listing) => !listing.joined));
@@ -89,63 +87,6 @@
 		if (moreThreadsFor) list(parentRoomId);
 	}
 
-	function openCreateRoom(): void {
-		createTitle = '';
-		createError = '';
-		createOpen = true;
-	}
-
-	function closeCreateRoom(): void {
-		createOpen = false;
-	}
-
-	function cancelCreateRoom(event: Event): void {
-		if (creatingRoom) event.preventDefault();
-	}
-
-	async function submitCreateRoom(event: SubmitEvent): Promise<void> {
-		event.preventDefault();
-		const title = createTitle.trim();
-		if (!title) {
-			createError = 'Enter a room name.';
-			return;
-		}
-		if (!canCreateRoom || creatingRoom) return;
-
-		creatingRoom = true;
-		createError = '';
-		try {
-			const result = await client.createRoom({ title }).promise;
-			if (typeof result.room_id !== 'string' || !result.room_id) throw new Error('Invalid room response');
-			pendingCreatedRoom = result.room_id;
-			createOpen = false;
-		} catch (cause) {
-			createError = cause instanceof Error ? cause.message : 'Unable to create room';
-		} finally {
-			creatingRoom = false;
-		}
-	}
-
-	$effect(() => {
-		const dialog = createDialog;
-		if (!dialog) return;
-		if (createOpen && !canCreateRoom) {
-			createOpen = false;
-		} else if (createOpen && !dialog.open) {
-			dialog.showModal();
-			createTitleInput?.focus();
-		} else if (!createOpen && dialog.open) {
-			dialog.close();
-		}
-	});
-
-	$effect(() => {
-		const roomId = pendingCreatedRoom;
-		const room = roomId ? session.rooms.find((candidate) => candidate.id === roomId) : undefined;
-		if (!room) return;
-		pendingCreatedRoom = undefined;
-		untrack(() => onroom(room));
-	});
 </script>
 
 <aside class="ap-shell-side" aria-label="Rooms">
@@ -158,7 +99,7 @@
 			<div class="ap-sect-head">
 				<span class="ap-sect-toggle" role="heading" aria-level="2">Rooms</span>
 				{#if canCreateRoom}
-					<button class="ap-btn ap-btn-ghost ap-btn-sm create-room-trigger" type="button" aria-label="Create room" title="Create room" onclick={openCreateRoom}>+</button>
+					<button class="ap-btn ap-btn-ghost ap-btn-sm create-room-trigger" type="button" aria-label="Create room" title="Create room" onclick={() => (createOpen = true)}><Plus size={18} aria-hidden="true" /></button>
 				{/if}
 			</div>
 			<div class="ap-sect-body" data-testid="room-list">
@@ -241,35 +182,12 @@
 	<ProfileBar {client} {session} {backendLabel} bind:displayName {passkeyUnavailable} {notificationsEnabled} {notificationsSupported} {notificationPermission} {notificationScope} {onnotifications} {onnotificationscope} {ontestnotifications} {onsignout} {onsignin} />
 </aside>
 
-<dialog class="create-room-dialog" bind:this={createDialog} aria-labelledby="create-room-title" oncancel={cancelCreateRoom} onclose={() => (createOpen = false)}>
-	<form class="create-room-form" onsubmit={submitCreateRoom}>
-		<header class="create-room-head">
-			<h2 id="create-room-title">Create a room</h2>
-			<button class="ap-btn ap-btn-ghost ap-btn-sm" type="button" aria-label="Close" disabled={creatingRoom} onclick={closeCreateRoom}>×</button>
-		</header>
-		<label for="create-room-name">Room name</label>
-		<input id="create-room-name" class="ap-field" bind:this={createTitleInput} bind:value={createTitle} autocomplete="off" required disabled={creatingRoom} />
-		{#if createError}<p class="create-room-error" role="alert">{createError}</p>{/if}
-		<div class="create-room-actions">
-			<button class="ap-btn ap-btn-ghost ap-btn-sm" type="button" disabled={creatingRoom} onclick={closeCreateRoom}>Cancel</button>
-			<button class="ap-btn ap-btn-primary ap-btn-sm" type="submit" disabled={creatingRoom}>{creatingRoom ? 'Creating…' : 'Create room'}</button>
-		</div>
-	</form>
-</dialog>
+<CreateRoomDialog {client} bind:open={createOpen} enabled={canCreateRoom} oncreated={oncreateroom} />
 
 <style>
 	.ap-shell-side { overflow: hidden; }
 	.ap-shell-sidehead { gap: var(--space-2); }
-	.create-room-trigger { width: 28px; padding: 0; justify-content: center; font-size: 20px; line-height: 1; }
-	.create-room-dialog { width: min(420px, calc(100vw - 32px)); max-width: none; margin: auto; padding: 0; color: var(--ink); background: var(--bg-100); border: 1px solid var(--line); border-radius: var(--radius-lg); box-shadow: var(--shadow-popover); }
-	.create-room-dialog::backdrop { background: rgba(5, 5, 12, .68); backdrop-filter: blur(2px); }
-	.create-room-form { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-6); }
-	.create-room-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
-	.create-room-head h2 { margin: 0; font-size: 18px; line-height: 24px; }
-	.create-room-form label { font-size: 13px; font-weight: 600; }
-	.create-room-form .ap-field { width: 100%; box-sizing: border-box; }
-	.create-room-error { margin: 0; color: var(--danger); font-size: 13px; }
-	.create-room-actions { display: flex; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-2); }
+	.create-room-trigger { width: 28px; padding: 0; justify-content: center; }
 	.backend { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 	.muted { margin: 0; padding: var(--space-1) var(--space-3); color: var(--ink-muted); font-size: 13px; line-height: 18px; }
 	.threads { display: flex; flex-direction: column; gap: 2px; }

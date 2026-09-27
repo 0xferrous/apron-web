@@ -168,6 +168,10 @@ room's `parent_room_id` finds whenever the room is opened or its threads are
 listed; that listing is also what refreshes their cards, since they deliver
 nothing live. Opening one of those reads it through `history` without joining
 it: its header offers **Join**, and replying joins it first.
+With the `rooms` cap, the **+** beside Rooms in the sidebar creates a room
+from a name (`room_set` with just a `title`); it opens once its `room_update`
+arrives, and the dialog stays open, with the server's error, if creating fails.
+
 With the `rooms` cap, **Start thread** on a message creates a thread under the
 room with that message as its intro; the message stays in the room, where its
 card stands in for it, and leads the thread's timeline, pinned under the header.
